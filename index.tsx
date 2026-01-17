@@ -69,6 +69,7 @@ const LoginModal = ({ user, onClose, onSuccess }: { user: User, onClose: () => v
     const [password, setPassword] = useState('');
     const [error, setError] = useState('');
     const [bioLoading, setBioLoading] = useState(false);
+    const [rememberMe, setRememberMe] = useState(false);
 
     // Check if biometric login is available for this user
     const hasBiometrics = !!user.biometricCredId;
@@ -77,8 +78,10 @@ const LoginModal = ({ user, onClose, onSuccess }: { user: User, onClose: () => v
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
         if (user.password && user.password === password) {
+            if (rememberMe) localStorage.setItem('attendance_app_user_id', user.id);
             onSuccess();
         } else if (!user.password) {
+            if (rememberMe) localStorage.setItem('attendance_app_user_id', user.id);
             onSuccess();
         } else {
             setError('كلمة المرور غير صحيحة');
@@ -104,6 +107,7 @@ const LoginModal = ({ user, onClose, onSuccess }: { user: User, onClose: () => v
 
             if (credential) {
                 // In a client-only app, successful retrieval is our "proof"
+                if (rememberMe) localStorage.setItem('attendance_app_user_id', user.id);
                 onSuccess();
             }
         } catch (e) {
@@ -155,6 +159,17 @@ const LoginModal = ({ user, onClose, onSuccess }: { user: User, onClose: () => v
                         />
                         {error && <p className="text-red-500 text-sm text-center font-bold">{error}</p>}
                         
+                        <div className="flex items-center gap-2 justify-center py-1">
+                            <input 
+                                type="checkbox" 
+                                id="rememberMe" 
+                                checked={rememberMe} 
+                                onChange={e => setRememberMe(e.target.checked)}
+                                className="w-4 h-4 accent-teal-600 cursor-pointer"
+                            />
+                            <label htmlFor="rememberMe" className="text-sm text-slate-600 cursor-pointer select-none">تذكرني على هذا الجهاز</label>
+                        </div>
+
                         <div className="grid grid-cols-2 gap-3">
                             <button type="button" onClick={onClose} className="p-3 bg-slate-100 text-slate-600 font-bold rounded-xl hover:bg-slate-200 transition">إلغاء</button>
                             <button type="submit" className="p-3 bg-teal-600 text-white font-bold rounded-xl hover:bg-teal-700 transition">دخول</button>
@@ -256,6 +271,17 @@ const UserSelection = ({ onSelect }: { onSelect: (u: User) => void }) => {
   }, []);
 
   useEffect(() => { loadUsers(); }, [loadUsers]);
+
+  // Auto Login if user is remembered
+  useEffect(() => {
+    const savedId = localStorage.getItem('attendance_app_user_id');
+    if (savedId && users.length > 0) {
+        const found = users.find(u => u.id === savedId);
+        if (found) {
+            onSelect(found);
+        }
+    }
+  }, [users, onSelect]);
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -730,6 +756,11 @@ const Dashboard = ({ user: initialUser, onLogout }: { user: User, onLogout: () =
       if (confirm('مسح جميع البيانات للمستخدم؟')) { await DB.clearEntries(user.id); setEntries([]); setLeaves([]); setNotes([]); }
   };
 
+  const handleLogout = () => {
+    localStorage.removeItem('attendance_app_user_id');
+    onLogout();
+  };
+
   // Calculations
   const monthEntries = entries.filter(e => e.date.startsWith(selectedMonth));
   const totalLateMinutes = monthEntries.reduce((sum, e) => sum + e.lateMinutes, 0);
@@ -798,7 +829,7 @@ const Dashboard = ({ user: initialUser, onLogout }: { user: User, onLogout: () =
                     {!isAdmin && (
                          <button onClick={handleReset} className="p-2 bg-white/10 hover:bg-white/20 rounded-lg text-white/80 transition"><Trash2 className="w-5 h-5" /></button>
                     )}
-                    <button onClick={onLogout} className="p-2 bg-white/10 hover:bg-white/20 rounded-lg text-white/80 transition"><LogOut className="w-5 h-5" /></button>
+                    <button onClick={handleLogout} className="p-2 bg-white/10 hover:bg-white/20 rounded-lg text-white/80 transition"><LogOut className="w-5 h-5" /></button>
                 </div>
             </div>
 
