@@ -1,0 +1,21 @@
+{
+  "name": "متابع تأخيرات دار الشفاء",
+  "short_name": "حضور الشفاء",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f8fafc",
+  "theme_color": "#0d9488",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "https://cdn-icons-png.flaticon.com/512/2907/2907253.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "https://cdn-icons-png.flaticon.com/512/2907/2907253.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}
