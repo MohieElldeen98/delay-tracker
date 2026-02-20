@@ -687,12 +687,33 @@ const Dashboard = ({ user: initialUser, onLogout }: { user: User, onLogout: () =
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
-  const calculateLate = (timeStr: string): number => {
+
+
+const calculateLate = (timeStr: string): number => {
     if (!timeStr) return 0;
     const [hours, minutes] = timeStr.split(':').map(Number);
     const totalMinutes = hours * 60 + minutes;
-    return totalMinutes <= (8 * 60 + 30) ? 0 : totalMinutes - (8 * 60);
+    
+    // 👇 غير الكلمة دي لـ false بعد رمضان عشان ترجع المواعيد العادية
+    const IS_RAMADAN = true; 
+
+    if (IS_RAMADAN) {
+      // مواعيد رمضان: التأخير بيتحسب من 9:00 صباحاً 
+      return totalMinutes <= (9 * 60) ? 0 : totalMinutes - (9 * 60);
+    } else {
+      // المواعيد العادية: الحضور 8:00 وفترة سماح لحد 8:30
+      return totalMinutes <= (8 * 60 + 30) ? 0 : totalMinutes - (8 * 60);
+    }
   };
+
+
+    
+  // const calculateLate = (timeStr: string): number => {
+  //  if (!timeStr) return 0;
+   // const [hours, minutes] = timeStr.split(':').map(Number);
+  //  const totalMinutes = hours * 60 + minutes;
+   // return totalMinutes <= (8 * 60 + 30) ? 0 : totalMinutes - (8 * 60);
+ // };
 
   const handleAddEntry = async (e: React.FormEvent) => {
     e.preventDefault();
