@@ -66,6 +66,7 @@ const ComingSoon = () => {
 
 // User Login Modal
 const LoginModal = ({ user, onClose, onSuccess }: { user: User, onClose: () => void, onSuccess: () => void }) => {
+    const [showPassword, setShowPassword] = useState(false);
     const [password, setPassword] = useState('');
     const [error, setError] = useState('');
     const [bioLoading, setBioLoading] = useState(false);
@@ -149,14 +150,23 @@ const LoginModal = ({ user, onClose, onSuccess }: { user: User, onClose: () => v
                     </div>}
 
                     <form onSubmit={handleSubmit} className="space-y-4">
-                        <input 
-                            type="password" 
-                            autoFocus={!canUseBiometrics}
-                            value={password}
-                            onChange={e => {setPassword(e.target.value); setError('');}}
-                            placeholder="كلمة المرور..."
-                            className={`w-full p-3 border rounded-xl outline-none text-center text-lg tracking-widest ${error ? 'border-red-500 bg-red-50' : 'border-slate-300 focus:border-teal-500'}`}
-                        />
+                        <div className="relative">
+                            <input 
+                                type={showPassword ? "text" : "password"} 
+                                autoFocus={!canUseBiometrics}
+                                value={password}
+                                onChange={e => {setPassword(e.target.value); setError('');}}
+                                placeholder="كلمة المرور..."
+                                className={`w-full p-3 border rounded-xl outline-none text-center text-lg tracking-widest ${error ? 'border-red-500 bg-red-50' : 'border-slate-300 focus:border-teal-500'}`}
+                            />
+                            <button 
+                                type="button" 
+                                onClick={() => setShowPassword(!showPassword)} 
+                                className="absolute top-1/2 left-3 -translate-y-1/2 text-slate-400 hover:text-teal-600"
+                            >
+                                {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                            </button>
+                        </div>
                         {error && <p className="text-red-500 text-sm text-center font-bold">{error}</p>}
                         
                         <div className="flex items-center gap-2 justify-center py-1">
