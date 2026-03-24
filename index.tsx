@@ -695,7 +695,7 @@ const calculateLate = (timeStr: string): number => {
     const totalMinutes = hours * 60 + minutes;
     
     // 👇 غير الكلمة دي لـ false بعد رمضان عشان ترجع المواعيد العادية
-    const IS_RAMADAN = true; 
+    const IS_RAMADAN = false; 
 
     if (IS_RAMADAN) {
       // مواعيد رمضان: التأخير بيتحسب من 9:00 صباحاً 
