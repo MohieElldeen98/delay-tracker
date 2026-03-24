@@ -270,6 +270,7 @@ const UserSelection = ({ onSelect }: { onSelect: (u: User) => void }) => {
   const [showAdminLogin, setShowAdminLogin] = useState(false);
 
   const [needsSetup, setNeedsSetup] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
 
   const loadUsers = useCallback(async () => {
     const db = DB.getDbInstance();
@@ -345,23 +346,44 @@ const UserSelection = ({ onSelect }: { onSelect: (u: User) => void }) => {
         
         {loading ? <div className="py-12 flex justify-center text-teal-600"><Loader2 className="w-8 h-8 animate-spin" /></div> : (
             <div className="space-y-3 mb-8 max-h-60 overflow-y-auto custom-scrollbar">
-                {users.map(user => (
-                    <button key={user.id} onClick={() => setLoginTarget(user)} className="w-full p-4 flex justify-between items-center bg-slate-50 hover:bg-teal-50 rounded-xl transition-all group border border-slate-200 hover:border-teal-200">
-                        <div className="flex items-center gap-3">
-                             <div className="w-8 h-8 rounded-full flex items-center justify-center bg-slate-100 text-slate-500 relative">
-                                <UserIcon className="w-4 h-4" />
-                                {user.biometricCredId && (
-                                    <div className="absolute -bottom-1 -right-1 bg-white rounded-full p-0.5 shadow-sm">
-                                        <ScanFace className="w-3 h-3 text-teal-600" />
-                                    </div>
-                                )}
-                             </div>
-                             <span className="font-bold text-lg text-slate-700">{user.name}</span>
-                        </div>
-                        {user.password ? <Lock className="w-4 h-4 text-slate-300 group-hover:text-teal-500" /> : <ChevronLeft className="w-5 h-5 text-slate-300 group-hover:text-teal-500" />}
-                    </button>
-                ))}
-                {users.length === 0 && <p className="text-center text-slate-400 py-4">لا يوجد مستخدمين. أضف مستخدم جديد.</p>}
+                
+                {/* مربع البحث */}
+                <input 
+                    type="text" 
+                    placeholder="ابحث عن اسمك هنا..." 
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="w-full p-3 mb-4 border border-slate-200 rounded-xl focus:ring-2 focus:ring-teal-500 outline-none text-center"
+                />
+        
+                {/* لو مربع البحث فاضي، اطلب منه يكتب اسمه */}
+                {searchQuery.trim() === '' ? (
+                    <p className="text-center text-slate-400 py-4">برجاء كتابة اسمك للبحث وتتسجيل الدخول</p>
+                ) : (
+                    /* لو كتب حاجة، اعرض بس الأسماء اللي مطابقة للبحث */
+                    users.filter(u => u.name.includes(searchQuery.trim())).map(user => (
+                        <button key={user.id} onClick={() => setLoginTarget(user)} className="w-full p-4 flex justify-between items-center bg-slate-50 hover:bg-teal-50 rounded-xl transition-all group border border-slate-200 hover:border-teal-200">
+                            <div className="flex items-center gap-3">
+                                 <div className="w-8 h-8 rounded-full flex items-center justify-center bg-slate-100 text-slate-500 relative">
+                                    <UserIcon className="w-4 h-4" />
+                                    {user.biometricCredId && (
+                                        <div className="absolute -bottom-1 -right-1 bg-white rounded-full p-0.5 shadow-sm">
+                                            <ScanFace className="w-3 h-3 text-teal-600" />
+                                        </div>
+                                    )}
+                                 </div>
+                                 <span className="font-bold text-lg text-slate-700">{user.name}</span>
+                            </div>
+                            {user.password ? <Lock className="w-4 h-4 text-slate-300 group-hover:text-teal-500" /> : <ChevronLeft className="w-5 h-5 text-slate-300 group-hover:text-teal-500" />}
+                        </button>
+                    ))
+                )}
+        
+                {/* لو كتب اسم مش موجود */}
+                {searchQuery.trim() !== '' && users.filter(u => u.name.includes(searchQuery.trim())).length === 0 && (
+                    <p className="text-center text-red-400 py-4">لم يتم العثور على اسم مطابق.</p>
+                )}
+        
             </div>
         )}
 
