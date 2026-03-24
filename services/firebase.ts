@@ -66,6 +66,11 @@ export const DB = {
     return saved ? JSON.parse(saved) : null;
   },
 
+updateUserPassword: async (userId: string, newPassword: string) => {
+    const userRef = doc(db, 'users', userId);
+    await updateDoc(userRef, { password: newPassword });
+  },
+  
   getDbInstance: () => {
     const config = DB.getConfig();
     if (!config) return null;
