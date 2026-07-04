@@ -560,42 +560,77 @@ const BalanceEditor = ({ user, onClose, onUpdate }: { user: User, onClose: () =>
     );
 };
 
-const SmartSuggestion = ({ lateMinutes, permissionsUsed }: { lateMinutes: number, permissionsUsed: number }) => {
-    if (lateMinutes <= MAX_ALLOWANCE) return null;
+const SmartSuggestion = ({ monthEntries, monthPermissions }: { monthEntries: AttendanceEntry[], monthPermissions: LeaveEntry[] }) => {
+    // حساب الأيام التي بها تأخير وغير مغطاة بالكامل بأذونات
+    const uncoveredDays = monthEntries.map(e => {
+        const dayPermission = monthPermissions.find(p => p.date === e.date);
+        const permMinutes = dayPermission ? (dayPermission.hours || 0) * 60 : 0;
+        const netLate = e.lateMinutes - permMinutes;
+        return {
+            date: e.date,
+            originalLate: e.lateMinutes,
+            netLate: netLate,
+            suggestedHours: netLate > 0 ? Math.ceil(netLate / 60) : 0
+        };
+    }).filter(d => d.netLate > 0);
 
-    const excess = lateMinutes - MAX_ALLOWANCE;
-    const permissionsLeft = MAX_MONTHLY_PERMISSIONS - permissionsUsed;
-    
-    // Calculate needed hours. 1 hour permission covers 60 mins of lateness conceptually (returns you to safe zone)
-    const hoursNeededToCover = Math.ceil(excess / 60);
+    // حساب إجمالي دقائق التأخير الصافية بعد خصم الأذونات
+    const totalLateMinutes = monthEntries.reduce((sum, e) => {
+        const dayPermission = monthPermissions.find(p => p.date === e.date);
+        const permMinutes = dayPermission ? (dayPermission.hours || 0) * 60 : 0;
+        return sum + Math.max(0, e.lateMinutes - permMinutes);
+    }, 0);
+
+    if (totalLateMinutes <= MAX_ALLOWANCE) return null;
+
+    const excess = totalLateMinutes - MAX_ALLOWANCE;
+    const permissionsLeft = MAX_MONTHLY_PERMISSIONS - monthPermissions.length;
 
     let message = "";
     let actionType = "info";
 
     if (permissionsLeft <= 0) {
-        message = `تجاوزت الحد بـ ${excess} دقيقة. للأسف استنفذت جميع الأذونات هذا الشهر. سيتم تطبيق الخصم.`;
+        message = `تجاوزت الحد بـ ${excess} دقيقة. للأسف استنفذت جميع الأذونات هذا الشهر (${monthPermissions.length}/3). سيتم تطبيق الخصم.`;
         actionType = "danger";
-    } else if (hoursNeededToCover > 3) { // Assuming max hours/permission is usually capped or practically hard to take multiple big permissions
-         message = `تجاوزت الحد بـ ${excess} دقيقة. تحتاج لأذونات بـ ${hoursNeededToCover} ساعات لتغطية ذلك، وهو رقم كبير قد لا يقبل كإذن واحد.`;
-         actionType = "warning";
+    } else if (uncoveredDays.length === 0) {
+        message = `تجاوزت الحد بـ ${excess} دقيقة. ليس لديك أي أيام تأخير إضافية غير مغطاة لتقديم أذونات عليها.`;
+        actionType = "warning";
     } else {
-        message = `تجاوزت الحد المسموح بـ ${excess} دقيقة. 
-        بما أن لديك ${permissionsLeft} أذونات متبقية، نقترح عليك تقديم **إذن تأخير لمدة ${hoursNeededToCover} ساعة** في أحد أيام التأخير ليعود رصيدك للمنطقة الآمنة.`;
+        // اقتراح الأيام مرتبة من الأكثر تأخيراً للأقل تأخيراً للاستفادة القصوى من الأذونات
+        const suggestions = uncoveredDays
+            .sort((a, b) => b.netLate - a.netLate) // ترتيب تنازلي (الأكبر أولاً)
+            .slice(0, permissionsLeft) // في حدود الأذونات المتبقية
+            .map(d => {
+                const formattedDate = new Date(d.date).toLocaleDateString('ar-EG', { day: 'numeric', month: 'long' });
+                
+                // تنبيه لو التأخير الفعلي بسيط جداً أقل من 30 دقيقة
+                if (d.originalLate < 30) {
+                    return `• يوم ${formattedDate}: تأخيرك الفعلي كان بسيطاً جداً (${d.originalLate} دقيقة). نقترح عدم إهدار إذن كامل (ساعة) عليه إلا إذا كنت مضطراً تماماً لخفض رصيد التأخيرات الكلي وتجنب الخصم.`;
+                }
+                
+                return `• تقديم إذن تأخير لمدة ${d.suggestedHours} ساعة في يوم ${formattedDate} (لتغطية تأخيرك الفعلي البالغ ${d.originalLate} دقيقة).`;
+            });
+
+        message = `تجاوزت الحد المسموح بـ ${excess} دقيقة. ولديك ${permissionsLeft} أذونات متبقية.\n` +
+                  `للاستفادة القصوى من الأذونات المتبقية وخفض رصيد تأخيراتك تحت الـ 360 دقيقة، نقترح عليك التقديم في الأيام التالية بالترتيب:\n` +
+                  suggestions.join('\n');
         actionType = "success";
     }
 
     const bg = actionType === 'danger' ? 'bg-red-50 border-red-200 text-red-800' 
              : actionType === 'warning' ? 'bg-orange-50 border-orange-200 text-orange-800'
-             : 'bg-blue-50 border-blue-200 text-blue-800';
+             : 'bg-emerald-50 border-emerald-200 text-emerald-800';
              
-    const icon = actionType === 'success' ? <Briefcase className="w-5 h-5 shrink-0" /> : <AlertTriangle className="w-5 h-5 shrink-0" />;
+    const icon = actionType === 'success' ? <Briefcase className="w-5 h-5 shrink-0 mt-0.5" /> : <AlertTriangle className="w-5 h-5 shrink-0 mt-0.5" />;
 
     return (
         <div className={`p-4 rounded-xl border ${bg} flex gap-3 items-start mt-4 shadow-sm`}>
             {icon}
             <div className="text-sm leading-relaxed font-medium">
-                <span className="font-bold block mb-1">اقتراح النظام:</span>
-                {message.split('\n').map((line, i) => <p key={i}>{line}</p>)}
+                <span className="font-bold block mb-1">اقتراح النظام الذكي:</span>
+                {message.split('\n').map((line, i) => (
+                    <p key={i} className="mt-1">{line}</p>
+                ))}
             </div>
         </div>
     );
@@ -877,11 +912,20 @@ const calculateLate = (timeStr: string): number => {
 
   // Calculations
   const monthEntries = entries.filter(e => e.date.startsWith(selectedMonth));
-  const totalLateMinutes = monthEntries.reduce((sum, e) => sum + e.lateMinutes, 0);
+  // Permissions are monthly limited
+  const monthPermissions = leaves.filter(l => l.type === 'permission' && l.date.startsWith(selectedMonth));
+  const permissionsUsedCount = monthPermissions.length; 
+
+  // حساب دقائق التأخير الصافية بعد خصم أوقات الأذونات اليومية
+  const totalLateMinutes = monthEntries.reduce((sum, e) => {
+      const dayPermission = monthPermissions.find(p => p.date === e.date);
+      const permMinutes = dayPermission ? (dayPermission.hours || 0) * 60 : 0;
+      return sum + Math.max(0, e.lateMinutes - permMinutes);
+  }, 0);
   const remainingLateBalance = MAX_ALLOWANCE - totalLateMinutes;
   const isOverLimit = remainingLateBalance < 0;
 
-  
+
 ////////////////////////////////////////////
   // Leave Calculations
 // حساب بداية ونهاية السنة المالية للإجازات (تبدأ من 1 يوليو وتنتهي 30 يونيو)
@@ -1045,7 +1089,7 @@ const calculateLate = (timeStr: string): number => {
                     </div>
 
                     {/* Smart Suggestion */}
-                    <SmartSuggestion lateMinutes={totalLateMinutes} permissionsUsed={permissionsUsedCount} />
+                    <SmartSuggestion monthEntries={monthEntries} monthPermissions={monthPermissions} />
                 </div>
             </div>
         )}
