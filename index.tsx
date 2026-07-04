@@ -912,9 +912,6 @@ const calculateLate = (timeStr: string): number => {
 
   // Calculations
   const monthEntries = entries.filter(e => e.date.startsWith(selectedMonth));
-  // Permissions are monthly limited
-  const monthPermissions = leaves.filter(l => l.type === 'permission' && l.date.startsWith(selectedMonth));
-  const permissionsUsedCount = monthPermissions.length; 
 
   // حساب دقائق التأخير الصافية بعد خصم أوقات الأذونات اليومية
   const totalLateMinutes = monthEntries.reduce((sum, e) => {
