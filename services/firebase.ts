@@ -267,5 +267,40 @@ updateUserPassword: async (userId: string, newPassword: string) => {
       const db = DB.getDbInstance();
       if (!db) throw new Error("Missing Config");
       await deleteDoc(doc(db, "notes", id));
+  },
+
+// ==========================================
+  // ميزة الدقائق الاستثنائية من المدير العام (Cloud Sync)
+  // ==========================================
+  getManagerBonuses: async (userId: string): Promise<string[]> => {
+    const db = DB.getDbInstance();
+    if (!db) return [];
+    const q = query(collection(db, "manager_bonuses"), where("userId", "==", userId));
+    const snapshot = await getDocs(q);
+    return snapshot.docs.map(doc => doc.data().month as string);
+  },
+
+  setManagerBonus: async (userId: string, month: string, hasBonus: boolean): Promise<void> => {
+    const db = DB.getDbInstance();
+    if (!db) return;
+    
+    const q = query(collection(db, "manager_bonuses"), where("userId", "==", userId), where("month", "==", month));
+    const snapshot = await getDocs(q);
+    
+    if (hasBonus) {
+      if (snapshot.empty) {
+        await addDoc(collection(db, "manager_bonuses"), {
+          userId,
+          month,
+          createdAt: new Date().toISOString()
+        });
+      }
+    } else {
+      const deletePromises = snapshot.docs.map(doc => deleteDoc(doc.ref));
+      await Promise.all(deletePromises);
+    }
   }
+
+
+
 };

@@ -560,7 +560,7 @@ const BalanceEditor = ({ user, onClose, onUpdate }: { user: User, onClose: () =>
     );
 };
 
-const SmartSuggestion = ({ monthEntries, monthPermissions }: { monthEntries: AttendanceEntry[], monthPermissions: LeaveEntry[] }) => {
+const SmartSuggestion = ({ monthEntries, monthPermissions, currentAllowance }: { monthEntries: AttendanceEntry[], monthPermissions: LeaveEntry[], currentAllowance: number }) => {
     // حساب الأيام التي بها تأخير وغير مغطاة بالكامل بأذونات
     const uncoveredDays = monthEntries.map(e => {
         const dayPermission = monthPermissions.find(p => p.date === e.date);
@@ -581,9 +581,9 @@ const SmartSuggestion = ({ monthEntries, monthPermissions }: { monthEntries: Att
         return sum + Math.max(0, e.lateMinutes - permMinutes);
     }, 0);
 
-    if (totalLateMinutes <= MAX_ALLOWANCE) return null;
+    if (totalLateMinutes <= currentAllowance) return null;
 
-    const excess = totalLateMinutes - MAX_ALLOWANCE;
+    const excess = totalLateMinutes - currentAllowance;
     const permissionsLeft = MAX_MONTHLY_PERMISSIONS - monthPermissions.length;
 
     let message = "";
@@ -607,11 +607,11 @@ const SmartSuggestion = ({ monthEntries, monthPermissions }: { monthEntries: Att
         const bestDaysToReduce = sortedUncovered.slice(0, permissionsLeft);
         const maxPossibleReduction = bestDaysToReduce.reduce((sum, d) => sum + Math.min(180, d.netLate), 0);
 
-        // هل هذا التقليل كافي للوصول لبر الأمان (تحت الـ 360 دقيقة)؟
-        if (totalLateMinutes - maxPossibleReduction > MAX_ALLOWANCE) {
+        // هل هذا التقليل كافي للوصول لبر الأمان؟
+        if (totalLateMinutes - maxPossibleReduction > currentAllowance) {
             const expectedNetLate = totalLateMinutes - maxPossibleReduction;
             message = `تجاوزت الحد المسموح بـ ${excess} دقيقة.\n` +
-                      `⚠️ تنبيه هام: حتى لو قمت بتقديم جميع الأذونات المتبقية لديك (${permissionsLeft} أذونات) بأقصى حد ممكن، فسيظل صافي تأخيرك (${expectedNetLate} دقيقة) أعلى من الحد المسموح به (360 دقيقة).\n` +
+                      `⚠️ تنبيه هام: حتى لو قمت بتقديم جميع الأذونات المتبقية لديك (${permissionsLeft} أذونات) بأقصى حد ممكن، فسيظل صافي تأخيرك (${expectedNetLate} دقيقة) أعلى من الحد المسموح به (${currentAllowance} دقيقة).\n` +
                       `لذلك، لا داعي لتقديم أي أذونات هذا الشهر لأنها لن تمنع تطبيق الخصم عليك، ونقترح عليك توفيرها إن أمكن.`;
             actionType = "warning";
         } else {
@@ -620,9 +620,9 @@ const SmartSuggestion = ({ monthEntries, monthPermissions }: { monthEntries: Att
             let currentLate = totalLateMinutes;
 
             for (const d of bestDaysToReduce) {
-                if (currentLate <= MAX_ALLOWANCE) break;
+                if (currentLate <= currentAllowance) break;
 
-                const neededReduction = currentLate - MAX_ALLOWANCE;
+                const neededReduction = currentLate - currentAllowance;
                 const possibleReductionOnThisDay = Math.min(180, d.netLate);
                 const actualReduction = Math.min(neededReduction, possibleReductionOnThisDay);
                 
@@ -644,7 +644,7 @@ const SmartSuggestion = ({ monthEntries, monthPermissions }: { monthEntries: Att
             });
 
             message = `تجاوزت الحد المسموح بـ ${excess} دقيقة. ولديك ${permissionsLeft} أذونات متبقية.\n` +
-                      `بشرى سارة! يمكنك الهروب من الخصم والعودة للمنطقة الآمنة (تحت الـ 360 دقيقة) من خلال تقديم الأذونات التالية فقط:\n` +
+                      `بشرى سارة! يمكنك الهروب من الخصم والعودة للمنطقة الآمنة (تحت الـ ${currentAllowance} دقيقة) من خلال تقديم الأذونات التالية فقط:\n` +
                       suggestions.join('\n');
             actionType = "success";
         }
@@ -822,7 +822,7 @@ const Dashboard = ({ user: initialUser, onLogout }: { user: User, onLogout: () =
     return `${year}-${month}`;
   });
 
-  const fetchData = useCallback(async () => {
+ const fetchData = useCallback(async () => {
     // Skip fetching specific user data if it's the virtual admin, as they have no data in DB
     if (user.role === 'admin') {
         setLoading(false);
@@ -831,14 +831,16 @@ const Dashboard = ({ user: initialUser, onLogout }: { user: User, onLogout: () =
 
     setLoading(true);
     try {
-        const [attData, leaveData, noteData] = await Promise.all([
+        const [attData, leaveData, noteData, bonusMonths] = await Promise.all([
             DB.getEntries(user.id),
             DB.getLeaves(user.id),
-            DB.getNotes(user.id)
+            DB.getNotes(user.id),
+            DB.getManagerBonuses(user.id) // 👈 جلب الشهور الحاصلة على البونص من السحابة
         ]);
         setEntries(attData.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
         setLeaves(leaveData.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
         setNotes(noteData.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
+        setManagerBonusMonths(bonusMonths || []); // 👈 حفظ الشهور المسترجعة
     } catch (e) {
         alert('فشل تحميل البيانات');
     } finally {
@@ -956,6 +958,10 @@ const calculateLate = (timeStr: string): number => {
       const permMinutes = dayPermission ? (dayPermission.hours || 0) * 60 : 0;
       return sum + Math.max(0, e.lateMinutes - permMinutes);
   }, 0);
+    // 👈 هنا يتم تغيير الحد الأقصى ديناميكياً بناء على حالة التشيك بوكس
+  const currentAllowance = hasManagerBonus ? 660 : 360; 
+  const remainingLateBalance = currentAllowance - totalLateMinutes;
+  const isOverLimit = remainingLateBalance < 0;
   const remainingLateBalance = MAX_ALLOWANCE - totalLateMinutes;
   const isOverLimit = remainingLateBalance < 0;
 
@@ -998,6 +1004,30 @@ const calculateLate = (timeStr: string): number => {
   };
 
   const isAdmin = user.role === 'admin';
+
+const [managerBonusMonths, setManagerBonusMonths] = useState<string[]>([]);
+  const hasManagerBonus = managerBonusMonths.includes(selectedMonth);
+
+  const handleToggleManagerBonus = async (checked: boolean) => {
+    // تحديث فوري وسريع واجهة المستخدم لتجربة سلسة
+    if (checked) {
+      setManagerBonusMonths(prev => [...prev, selectedMonth]);
+    } else {
+      setManagerBonusMonths(prev => prev.filter(m => m !== selectedMonth));
+    }
+
+    try {
+      await DB.setManagerBonus(user.id, selectedMonth, checked);
+    } catch (err) {
+      alert('فشل حفظ التعديل في السحابة');
+      // تراجع عن التغيير إذا حدث خطأ بالشبكة
+      if (checked) {
+        setManagerBonusMonths(prev => prev.filter(m => m !== selectedMonth));
+      } else {
+        setManagerBonusMonths(prev => [...prev, selectedMonth]);
+      }
+    }
+  };
 
   return (
     <div className="min-h-screen bg-slate-50 pb-12 font-sans">
@@ -1109,17 +1139,33 @@ const calculateLate = (timeStr: string): number => {
                     {/* Late Progress */}
                     <div>
                         <div className="flex justify-between text-xs mb-1">
-                            <span className="text-slate-500">دقائق التأخير (الحد 360)</span>
-                            <span className="font-bold text-slate-700">{totalLateMinutes} / 360</span>
+                            <span className="text-slate-500">دقائق التأخير (الحد {currentAllowance})</span>
+                            <span className="font-bold text-slate-700">{totalLateMinutes} / {currentAllowance}</span>
                         </div>
                         <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
-                            <div className={`h-full transition-all ${isOverLimit ? 'bg-red-500' : 'bg-teal-500'}`} style={{ width: `${Math.min(100, (totalLateMinutes/360)*100)}%` }}></div>
+                            <div className={`h-full transition-all ${isOverLimit ? 'bg-red-500' : 'bg-teal-500'}`} style={{ width: `${Math.min(100, (totalLateMinutes/currentAllowance)*100)}%` }}></div>
+                        </div>
+                    </div>
+
+                    {/* Manager's Bonus Checkbox */}
+                    <div className="bg-teal-50 border border-teal-100 p-3 rounded-xl flex items-center justify-between mt-2">
+                        <div className="flex items-center gap-3">
+                            <input 
+                                id="manager-bonus-checkbox"
+                                type="checkbox" 
+                                checked={hasManagerBonus}
+                                onChange={(e) => handleToggleManagerBonus(e.target.checked)}
+                                className="w-5 h-5 text-teal-600 bg-white border-slate-300 rounded focus:ring-teal-500 cursor-pointer"
+                            />
+                            <label htmlFor="manager-bonus-checkbox" className="cursor-pointer select-none">
+                                <span className="text-xs font-bold text-slate-800 block">إضافة دقائق استثنائية من المدير العام (+300 دقيقة)</span>
+                                <span className="text-[10px] text-slate-500 block">رفع رصيد التأخير المسموح هذا الشهر إلى 660 دقيقة بدلاً من 360</span>
+                            </label>
                         </div>
                     </div>
 
                     {/* Smart Suggestion */}
-                    <SmartSuggestion monthEntries={monthEntries} monthPermissions={monthPermissions} />
-                </div>
+                    <SmartSuggestion monthEntries={monthEntries} monthPermissions={monthPermissions} currentAllowance={currentAllowance} />                </div>
             </div>
         )}
 
