@@ -570,7 +570,7 @@ const SmartSuggestion = ({ monthEntries, monthPermissions }: { monthEntries: Att
             date: e.date,
             originalLate: e.lateMinutes,
             netLate: netLate,
-            suggestedHours: netLate > 0 ? Math.ceil(netLate / 60) : 0
+            suggestedHours: netLate > 0 ? Math.min(3, Math.ceil(netLate / 60)) : 0
         };
     }).filter(d => d.netLate > 0);
 
@@ -587,34 +587,67 @@ const SmartSuggestion = ({ monthEntries, monthPermissions }: { monthEntries: Att
     const permissionsLeft = MAX_MONTHLY_PERMISSIONS - monthPermissions.length;
 
     let message = "";
-    let actionType = "info";
+    let actionType: "success" | "warning" | "danger" = "success";
 
     if (permissionsLeft <= 0) {
         message = `تجاوزت الحد بـ ${excess} دقيقة. للأسف استنفذت جميع الأذونات هذا الشهر (${monthPermissions.length}/3). سيتم تطبيق الخصم.`;
         actionType = "danger";
     } else if (uncoveredDays.length === 0) {
         message = `تجاوزت الحد بـ ${excess} دقيقة. ليس لديك أي أيام تأخير إضافية غير مغطاة لتقديم أذونات عليها.`;
-        actionType = "warning";
+        actionType = "danger";
     } else {
-        // اقتراح الأيام مرتبة من الأكثر تأخيراً للأقل تأخيراً للاستفادة القصوى من الأذونات
-        const suggestions = uncoveredDays
-            .sort((a, b) => b.netLate - a.netLate) // ترتيب تنازلي (الأكبر أولاً)
-            .slice(0, permissionsLeft) // في حدود الأذونات المتبقية
-            .map(d => {
-                const formattedDate = new Date(d.date).toLocaleDateString('ar-EG', { day: 'numeric', month: 'long' });
+        // ترتيب الأيام تنازلياً حسب أقصى تقليل ممكن (الحد الأقصى للإذن الواحد هو 3 ساعات أي 180 دقيقة)
+        const sortedUncovered = [...uncoveredDays].sort((a, b) => {
+            const maxRedA = Math.min(180, a.netLate);
+            const maxRedB = Math.min(180, b.netLate);
+            return maxRedB - maxRedA;
+        });
+
+        // اختيار أفضل الأيام التي يمكن تغطيتها بالأذونات المتبقية وحساب أقصى تقليل ممكن
+        const bestDaysToReduce = sortedUncovered.slice(0, permissionsLeft);
+        const maxPossibleReduction = bestDaysToReduce.reduce((sum, d) => sum + Math.min(180, d.netLate), 0);
+
+        // هل هذا التقليل كافي للوصول لبر الأمان (تحت الـ 360 دقيقة)؟
+        if (totalLateMinutes - maxPossibleReduction > MAX_ALLOWANCE) {
+            const expectedNetLate = totalLateMinutes - maxPossibleReduction;
+            message = `تجاوزت الحد المسموح بـ ${excess} دقيقة.\n` +
+                      `⚠️ تنبيه هام: حتى لو قمت بتقديم جميع الأذونات المتبقية لديك (${permissionsLeft} أذونات) بأقصى حد ممكن، فسيظل صافي تأخيرك (${expectedNetLate} دقيقة) أعلى من الحد المسموح به (360 دقيقة).\n` +
+                      `لذلك، لا داعي لتقديم أي أذونات هذا الشهر لأنها لن تمنع تطبيق الخصم عليك، ونقترح عليك توفيرها إن أمكن.`;
+            actionType = "warning";
+        } else {
+            // إذا كان يمكنه الهروب، نقوم بحساب الحد الأدنى من الأذونات المطلوبة بالضبط للوصول لبر الأمان
+            const suggestedPermissions: { date: string; hours: number; originalLate: number }[] = [];
+            let currentLate = totalLateMinutes;
+
+            for (const d of bestDaysToReduce) {
+                if (currentLate <= MAX_ALLOWANCE) break;
+
+                const neededReduction = currentLate - MAX_ALLOWANCE;
+                const possibleReductionOnThisDay = Math.min(180, d.netLate);
+                const actualReduction = Math.min(neededReduction, possibleReductionOnThisDay);
                 
-                // تنبيه لو التأخير الفعلي بسيط جداً أقل من 30 دقيقة
-                if (d.originalLate < 30) {
-                    return `• يوم ${formattedDate}: تأخيرك الفعلي كان بسيطاً جداً (${d.originalLate} دقيقة). نقترح عدم إهدار إذن كامل (ساعة) عليه إلا إذا كنت مضطراً تماماً لخفض رصيد التأخيرات الكلي وتجنب الخصم.`;
-                }
+                // حساب عدد الساعات المطلوبة (كل ساعة تغطي 60 دقيقة)
+                const hours = Math.ceil(actualReduction / 60);
                 
-                return `• تقديم إذن تأخير لمدة ${d.suggestedHours} ساعة في يوم ${formattedDate} (لتغطية تأخيرك الفعلي البالغ ${d.originalLate} دقيقة).`;
+                suggestedPermissions.push({
+                    date: d.date,
+                    hours: hours,
+                    originalLate: d.originalLate
+                });
+
+                currentLate -= (hours * 60);
+            }
+
+            const suggestions = suggestedPermissions.map(p => {
+                const formattedDate = new Date(p.date).toLocaleDateString('ar-EG', { day: 'numeric', month: 'long' });
+                return `• تقديم إذن تأخير لمدة ${p.hours} ساعة في يوم ${formattedDate} (لتغطية تأخيرك البالغ ${p.originalLate} دقيقة).`;
             });
 
-        message = `تجاوزت الحد المسموح بـ ${excess} دقيقة. ولديك ${permissionsLeft} أذونات متبقية.\n` +
-                  `للاستفادة القصوى من الأذونات المتبقية وخفض رصيد تأخيراتك تحت الـ 360 دقيقة، نقترح عليك التقديم في الأيام التالية بالترتيب:\n` +
-                  suggestions.join('\n');
-        actionType = "success";
+            message = `تجاوزت الحد المسموح بـ ${excess} دقيقة. ولديك ${permissionsLeft} أذونات متبقية.\n` +
+                      `بشرى سارة! يمكنك الهروب من الخصم والعودة للمنطقة الآمنة (تحت الـ 360 دقيقة) من خلال تقديم الأذونات التالية فقط:\n` +
+                      suggestions.join('\n');
+            actionType = "success";
+        }
     }
 
     const bg = actionType === 'danger' ? 'bg-red-50 border-red-200 text-red-800' 
