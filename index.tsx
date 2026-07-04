@@ -821,6 +821,9 @@ const Dashboard = ({ user: initialUser, onLogout }: { user: User, onLogout: () =
     return `${year}-${month}`;
   });
 
+  const [managerBonusMonths, setManagerBonusMonths] = useState<string[]>([]);
+  const hasManagerBonus = managerBonusMonths.includes(selectedMonth);
+
  const fetchData = useCallback(async () => {
     // Skip fetching specific user data if it's the virtual admin, as they have no data in DB
     if (user.role === 'admin') {
@@ -1001,9 +1004,6 @@ const calculateLate = (timeStr: string): number => {
   };
 
   const isAdmin = user.role === 'admin';
-
-const [managerBonusMonths, setManagerBonusMonths] = useState<string[]>([]);
-  const hasManagerBonus = managerBonusMonths.includes(selectedMonth);
 
   const handleToggleManagerBonus = async (checked: boolean) => {
     // تحديث فوري وسريع واجهة المستخدم لتجربة سلسة
