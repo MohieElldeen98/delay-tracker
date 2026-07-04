@@ -913,6 +913,10 @@ const calculateLate = (timeStr: string): number => {
   // Calculations
   const monthEntries = entries.filter(e => e.date.startsWith(selectedMonth));
 
+  // Permissions are monthly limited
+  const monthPermissions = leaves.filter(l => l.type === 'permission' && l.date.startsWith(selectedMonth));
+  const permissionsUsedCount = monthPermissions.length;
+
   // حساب دقائق التأخير الصافية بعد خصم أوقات الأذونات اليومية
   const totalLateMinutes = monthEntries.reduce((sum, e) => {
       const dayPermission = monthPermissions.find(p => p.date === e.date);
@@ -947,13 +951,8 @@ const calculateLate = (timeStr: string): number => {
   // حساب الإجازات المستخدمة فقط خلال السنة المالية الحالية (من 1 يوليو إلى 30 يونيو)
   const annualUsed = leaves.filter(l => l.type === 'annual' && l.date >= fiscalRange.start && l.date <= fiscalRange.end).length;
   const casualUsed = leaves.filter(l => l.type === 'casual' && l.date >= fiscalRange.start && l.date <= fiscalRange.end).length;
-//////////////////////////////////////////// 
+////////////////////////////////////////////
 
-
-  // Permissions are monthly limited
-  const monthPermissions = leaves.filter(l => l.type === 'permission' && l.date.startsWith(selectedMonth));
-  const permissionsUsedCount = monthPermissions.length; 
-  
   const formatMonth = (m: string) => {
       const d = new Date(Number(m.split('-')[0]), Number(m.split('-')[1]) - 1);
       return d.toLocaleDateString('ar-EG', { month: 'long', year: 'numeric' });
