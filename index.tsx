@@ -3,7 +3,6 @@ import { createRoot } from 'react-dom/client';
 import { Clock, Calendar, AlertTriangle, CheckCircle, Trash2, Plus, AlertOctagon, ChevronRight, ChevronLeft, CalendarDays, LogOut, User as UserIcon, Loader2, LayoutDashboard, Save, Flame, Settings, Briefcase, Plane, Timer, Edit3, X, Lock, KeyRound, Construction, ShieldCheck, Users, Shield, Eye, EyeOff, Fingerprint, ScanFace, StickyNote, PenTool } from 'lucide-react';
 import { DB, type User, type AttendanceEntry, type LeaveEntry, type NoteEntry } from './services/firebase';
 
-const MAX_ALLOWANCE = 360;
 const MAX_MONTHLY_PERMISSIONS = 3;
 
 // --- Admin Configuration ---
@@ -961,8 +960,6 @@ const calculateLate = (timeStr: string): number => {
     // 👈 هنا يتم تغيير الحد الأقصى ديناميكياً بناء على حالة التشيك بوكس
   const currentAllowance = hasManagerBonus ? 660 : 360; 
   const remainingLateBalance = currentAllowance - totalLateMinutes;
-  const isOverLimit = remainingLateBalance < 0;
-  const remainingLateBalance = MAX_ALLOWANCE - totalLateMinutes;
   const isOverLimit = remainingLateBalance < 0;
 
 
