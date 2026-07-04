@@ -881,9 +881,34 @@ const calculateLate = (timeStr: string): number => {
   const remainingLateBalance = MAX_ALLOWANCE - totalLateMinutes;
   const isOverLimit = remainingLateBalance < 0;
 
+  
+////////////////////////////////////////////
   // Leave Calculations
-  const annualUsed = leaves.filter(l => l.type === 'annual').length;
-  const casualUsed = leaves.filter(l => l.type === 'casual').length;
+// حساب بداية ونهاية السنة المالية للإجازات (تبدأ من 1 يوليو وتنتهي 30 يونيو)
+  const getFiscalYearRange = () => {
+      const now = new Date();
+      const currentYear = now.getFullYear();
+      const currentMonth = now.getMonth(); // 0 = يناير، 6 = يوليو
+      
+      // إذا كنا في شهر يوليو (شهر 6 بالبرمجة) أو بعده، تكون السنة المالية قد بدأت في يوليو من نفس العام
+      // أما إذا كنا قبل شهر يوليو، فتكون قد بدأت في يوليو من العام الماضي
+      const startYear = currentMonth >= 6 ? currentYear : currentYear - 1;
+      const endYear = startYear + 1;
+      
+      return {
+          start: `${startYear}-07-01`, // بداية السنة المالية
+          end: `${endYear}-06-30`     // نهاية السنة المالية
+      };
+  };
+
+  const fiscalRange = getFiscalYearRange();
+
+  // حساب الإجازات المستخدمة فقط خلال السنة المالية الحالية (من 1 يوليو إلى 30 يونيو)
+  const annualUsed = leaves.filter(l => l.type === 'annual' && l.date >= fiscalRange.start && l.date <= fiscalRange.end).length;
+  const casualUsed = leaves.filter(l => l.type === 'casual' && l.date >= fiscalRange.start && l.date <= fiscalRange.end).length;
+//////////////////////////////////////////// 
+
+
   // Permissions are monthly limited
   const monthPermissions = leaves.filter(l => l.type === 'permission' && l.date.startsWith(selectedMonth));
   const permissionsUsedCount = monthPermissions.length; 
