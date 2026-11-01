@@ -19,6 +19,7 @@ export interface AttendanceEntry {
   date: string;
   time: string;
   lateMinutes: number;
+  schedule?: '8am' | '9am'; // Work schedule used for this entry
   note?: string; // Added note field
 }
 
@@ -46,6 +47,7 @@ export interface User {
   biometricCredId?: string; // Stores the WebAuthn Credential ID
   annualBalance: number; // Default 21
   casualBalance: number; // Default 7
+  defaultSchedule?: '8am' | '9am'; // Default schedule: '8am' or '9am'
 }
 
 interface FirebaseConfig {
@@ -66,11 +68,6 @@ export const DB = {
     return saved ? JSON.parse(saved) : null;
   },
 
-updateUserPassword: async (userId: string, newPassword: string) => {
-    const userRef = doc(db, 'users', userId);
-    await updateDoc(userRef, { password: newPassword });
-  },
-  
   getDbInstance: () => {
     const config = DB.getConfig();
     if (!config) return null;
@@ -111,12 +108,13 @@ updateUserPassword: async (userId: string, newPassword: string) => {
             role: 'user', // Always return 'user' from DB since Admin is virtual
             biometricCredId: data.biometricCredId || undefined,
             annualBalance: data.annualBalance ?? 21,
-            casualBalance: data.casualBalance ?? 7
+            casualBalance: data.casualBalance ?? 7,
+            defaultSchedule: data.defaultSchedule || '8am'
         } as User;
     });
   },
 
-  createUser: async (name: string, password: string): Promise<User> => {
+  createUser: async (name: string, password: string, defaultSchedule: '8am' | '9am' = '8am'): Promise<User> => {
     const db = DB.getDbInstance();
     if (!db) throw new Error("Missing Config");
 
@@ -127,9 +125,10 @@ updateUserPassword: async (userId: string, newPassword: string) => {
       role: 'user',
       annualBalance: 21,
       casualBalance: 7,
+      defaultSchedule,
       createdAt: new Date().toISOString()
     });
-    return { id: docRef.id, name, password, role: 'user', annualBalance: 21, casualBalance: 7 };
+    return { id: docRef.id, name, password, role: 'user', annualBalance: 21, casualBalance: 7, defaultSchedule };
   },
 
   updateUserBalance: async (userId: string, annual: number, casual: number): Promise<void> => {
@@ -138,6 +137,14 @@ updateUserPassword: async (userId: string, newPassword: string) => {
       await updateDoc(doc(db, "users", userId), {
           annualBalance: annual,
           casualBalance: casual
+      });
+  },
+
+  updateUserSchedule: async (userId: string, schedule: '8am' | '9am'): Promise<void> => {
+      const db = DB.getDbInstance();
+      if (!db) throw new Error("Missing Config");
+      await updateDoc(doc(db, "users", userId), {
+          defaultSchedule: schedule
       });
   },
 
@@ -179,10 +186,17 @@ updateUserPassword: async (userId: string, newPassword: string) => {
       date: entry.date,
       time: entry.time,
       lateMinutes: entry.lateMinutes,
+      schedule: entry.schedule || '8am',
       note: entry.note || '', // Save note
       createdAt: new Date().toISOString()
     });
     return { ...entry, id: docRef.id };
+  },
+
+  updateEntry: async (id: string, data: Partial<AttendanceEntry>): Promise<void> => {
+    const db = DB.getDbInstance();
+    if (!db) throw new Error("Missing Config");
+    await updateDoc(doc(db, "attendance", id), data);
   },
 
   deleteEntry: async (id: string): Promise<void> => {
@@ -269,9 +283,7 @@ updateUserPassword: async (userId: string, newPassword: string) => {
       await deleteDoc(doc(db, "notes", id));
   },
 
-// ==========================================
-  // ميزة الدقائق الاستثنائية من المدير العام (Cloud Sync)
-  // ==========================================
+  // Manager Bonuses
   getManagerBonuses: async (userId: string): Promise<string[]> => {
     const db = DB.getDbInstance();
     if (!db) return [];
@@ -300,7 +312,4 @@ updateUserPassword: async (userId: string, newPassword: string) => {
       await Promise.all(deletePromises);
     }
   }
-
-
-
 };
