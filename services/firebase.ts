@@ -283,32 +283,76 @@ export const DB = {
       await deleteDoc(doc(db, "notes", id));
   },
 
-  // Manager Bonuses
-  getManagerBonuses: async (userId: string): Promise<string[]> => {
+  // Manager Bonuses / Exceptional Minutes
+  getManagerBonuses: async (userId: string): Promise<Record<string, number>> => {
+    let localMap: Record<string, number> = {};
+    try {
+      const raw = localStorage.getItem(`manager_bonuses_${userId}`);
+      if (raw) localMap = JSON.parse(raw);
+    } catch (e) {
+      // ignore
+    }
+
     const db = DB.getDbInstance();
-    if (!db) return [];
-    const q = query(collection(db, "manager_bonuses"), where("userId", "==", userId));
-    const snapshot = await getDocs(q);
-    return snapshot.docs.map(doc => doc.data().month as string);
+    if (!db) return localMap;
+
+    try {
+      const q = query(collection(db, "manager_bonuses"), where("userId", "==", userId));
+      const snapshot = await getDocs(q);
+      const result: Record<string, number> = { ...localMap };
+      snapshot.docs.forEach(docSnap => {
+        const data = docSnap.data();
+        const month = data.month as string;
+        // If minutes field exists, use it; otherwise fallback to 300 for legacy records
+        result[month] = typeof data.minutes === 'number' ? data.minutes : 300;
+      });
+      try {
+        localStorage.setItem(`manager_bonuses_${userId}`, JSON.stringify(result));
+      } catch (e) {}
+      return result;
+    } catch (e) {
+      console.warn("Could not fetch manager bonuses from cloud, using local fallback", e);
+      return localMap;
+    }
   },
 
-  setManagerBonus: async (userId: string, month: string, hasBonus: boolean): Promise<void> => {
+  setManagerBonus: async (userId: string, month: string, minutes: number): Promise<void> => {
+    try {
+      const raw = localStorage.getItem(`manager_bonuses_${userId}`);
+      const map: Record<string, number> = raw ? JSON.parse(raw) : {};
+      if (minutes > 0) {
+        map[month] = minutes;
+      } else {
+        delete map[month];
+      }
+      localStorage.setItem(`manager_bonuses_${userId}`, JSON.stringify(map));
+    } catch (e) {
+      console.warn("Could not save manager bonus to localStorage", e);
+    }
+
     const db = DB.getDbInstance();
     if (!db) return;
     
     const q = query(collection(db, "manager_bonuses"), where("userId", "==", userId), where("month", "==", month));
     const snapshot = await getDocs(q);
     
-    if (hasBonus) {
+    if (minutes > 0) {
       if (snapshot.empty) {
         await addDoc(collection(db, "manager_bonuses"), {
           userId,
           month,
+          minutes,
           createdAt: new Date().toISOString()
         });
+      } else {
+        const firstDoc = snapshot.docs[0];
+        await updateDoc(firstDoc.ref, { minutes, updatedAt: new Date().toISOString() });
+        for (let i = 1; i < snapshot.docs.length; i++) {
+          await deleteDoc(snapshot.docs[i].ref);
+        }
       }
     } else {
-      const deletePromises = snapshot.docs.map(doc => deleteDoc(doc.ref));
+      const deletePromises = snapshot.docs.map(docSnap => deleteDoc(docSnap.ref));
       await Promise.all(deletePromises);
     }
   }

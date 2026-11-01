@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { createRoot } from 'react-dom/client';
-import { Clock, Calendar, AlertTriangle, CheckCircle, Trash2, Plus, AlertOctagon, ChevronRight, ChevronLeft, CalendarDays, LogOut, User as UserIcon, Loader2, LayoutDashboard, Save, Flame, Settings, Briefcase, Plane, Timer, Edit3, X, Lock, KeyRound, Construction, ShieldCheck, Users, Shield, Eye, EyeOff, Fingerprint, ScanFace, StickyNote, PenTool } from 'lucide-react';
+import { Clock, Calendar, AlertTriangle, CheckCircle, Trash2, Plus, AlertOctagon, ChevronRight, ChevronLeft, CalendarDays, LogOut, User as UserIcon, Loader2, LayoutDashboard, Save, Flame, Settings, Briefcase, Plane, Timer, Edit3, X, Lock, KeyRound, Construction, ShieldCheck, Users, Shield, Eye, EyeOff, Fingerprint, ScanFace, StickyNote, PenTool, Sparkles } from 'lucide-react';
 import { DB, type User, type AttendanceEntry, type LeaveEntry, type NoteEntry } from './services/firebase';
 
 const MAX_ALLOWANCE = 360;
@@ -1011,27 +1011,37 @@ const Dashboard = ({ user: initialUser, onLogout }: { user: User, onLogout: () =
     return `${year}-${month}`;
   });
 
-  const [managerBonusMonths, setManagerBonusMonths] = useState<string[]>([]);
-  const hasManagerBonus = managerBonusMonths.includes(selectedMonth);
+  const [managerBonusMinutesMap, setManagerBonusMinutesMap] = useState<Record<string, number>>({});
+  const [customBonusInput, setCustomBonusInput] = useState<string>('');
+  const [savingBonus, setSavingBonus] = useState(false);
 
-  const handleToggleManagerBonus = async (checked: boolean) => {
+  const extraMinutes = managerBonusMinutesMap[selectedMonth] || 0;
+
+  // Sync input when month changes or when map changes
+  useEffect(() => {
+    const mins = managerBonusMinutesMap[selectedMonth] || 0;
+    setCustomBonusInput(mins > 0 ? String(mins) : '');
+  }, [selectedMonth, managerBonusMinutesMap]);
+
+  const handleSaveCustomBonus = async (val: string) => {
+    const num = Math.max(0, parseInt(val, 10) || 0);
+    const oldNum = managerBonusMinutesMap[selectedMonth] || 0;
+    if (num === oldNum && String(num === 0 ? '' : num) === customBonusInput) return;
+
     // Up-front optimistic update
-    if (checked) {
-      setManagerBonusMonths(prev => [...prev, selectedMonth]);
-    } else {
-      setManagerBonusMonths(prev => prev.filter(m => m !== selectedMonth));
-    }
+    setManagerBonusMinutesMap(prev => ({ ...prev, [selectedMonth]: num }));
+    setCustomBonusInput(num > 0 ? String(num) : '');
+    setSavingBonus(true);
 
     try {
-      await DB.setManagerBonus(user.id, selectedMonth, checked);
+      await DB.setManagerBonus(user.id, selectedMonth, num);
     } catch (err) {
       alert('فشل حفظ التعديل في السحابة');
       // Revert if failed
-      if (checked) {
-        setManagerBonusMonths(prev => prev.filter(m => m !== selectedMonth));
-      } else {
-        setManagerBonusMonths(prev => [...prev, selectedMonth]);
-      }
+      setManagerBonusMinutesMap(prev => ({ ...prev, [selectedMonth]: oldNum }));
+      setCustomBonusInput(oldNum > 0 ? String(oldNum) : '');
+    } finally {
+      setSavingBonus(false);
     }
   };
 
@@ -1044,7 +1054,7 @@ const Dashboard = ({ user: initialUser, onLogout }: { user: User, onLogout: () =
 
     setLoading(true);
     try {
-        const [attData, leaveData, noteData, bonusMonths] = await Promise.all([
+        const [attData, leaveData, noteData, bonusMap] = await Promise.all([
             DB.getEntries(user.id),
             DB.getLeaves(user.id),
             DB.getNotes(user.id),
@@ -1053,7 +1063,7 @@ const Dashboard = ({ user: initialUser, onLogout }: { user: User, onLogout: () =
         setEntries(attData.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
         setLeaves(leaveData.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
         setNotes(noteData.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
-        setManagerBonusMonths(bonusMonths || []);
+        setManagerBonusMinutesMap(bonusMap || {});
     } catch (e) {
         alert('فشل تحميل البيانات');
     } finally {
@@ -1143,7 +1153,7 @@ const Dashboard = ({ user: initialUser, onLogout }: { user: User, onLogout: () =
       const permMinutes = dayPermission ? (dayPermission.hours || 0) * 60 : 0;
       return sum + Math.max(0, e.lateMinutes - permMinutes);
   }, 0);
-  const currentAllowance = hasManagerBonus ? 660 : 360;
+  const currentAllowance = MAX_ALLOWANCE + extraMinutes;
   const remainingLateBalance = currentAllowance - totalLateMinutes;
   const isOverLimit = remainingLateBalance < 0;
 
@@ -1301,20 +1311,83 @@ const Dashboard = ({ user: initialUser, onLogout }: { user: User, onLogout: () =
                         </div>
                     </div>
 
-                    {/* Manager's Bonus Checkbox */}
-                    <div className="bg-teal-50 border border-teal-100 p-3 rounded-xl flex items-center justify-between mt-2">
-                        <div className="flex items-center gap-3">
-                            <input 
-                                id="manager-bonus-checkbox"
-                                type="checkbox" 
-                                checked={hasManagerBonus}
-                                onChange={(e) => handleToggleManagerBonus(e.target.checked)}
-                                className="w-5 h-5 text-teal-600 bg-white border-slate-300 rounded focus:ring-teal-500 cursor-pointer"
-                            />
-                            <label htmlFor="manager-bonus-checkbox" className="cursor-pointer select-none">
-                                <span className="text-xs font-bold text-slate-800 block">إضافة دقائق استثنائية من المدير العام (+300 دقيقة)</span>
-                                <span className="text-[10px] text-slate-500 block">رفع رصيد التأخير المسموح هذا الشهر إلى 660 دقيقة بدلاً من 360</span>
-                            </label>
+                    {/* Exceptional Minutes / Manager Bonus Section */}
+                    <div className="bg-gradient-to-r from-teal-50 via-teal-50/70 to-emerald-50 border border-teal-200/80 p-3.5 rounded-xl mt-3 space-y-3">
+                        <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2.5">
+                                <div className="p-1.5 bg-teal-600 text-white rounded-lg shadow-sm">
+                                    <Sparkles className="w-4 h-4" />
+                                </div>
+                                <div>
+                                    <span className="text-xs font-bold text-slate-800 block">دقائق استثنائية من المدير (رصيد إضافي للشهر)</span>
+                                    <span className="text-[10px] text-slate-500 block">
+                                        الأساسي: 360 د + الاستثنائي: {extraMinutes} د = {currentAllowance} دقيقة
+                                    </span>
+                                </div>
+                            </div>
+                            {extraMinutes > 0 && (
+                                <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-teal-100 text-teal-700 border border-teal-200">
+                                    +{extraMinutes} دقيقة إضافية
+                                </span>
+                            )}
+                        </div>
+
+                        <div className="flex items-center gap-2 pt-1 border-t border-teal-100/80">
+                            <div className="relative flex-1">
+                                <input 
+                                    type="number"
+                                    min="0"
+                                    step="5"
+                                    value={customBonusInput}
+                                    onChange={(e) => setCustomBonusInput(e.target.value)}
+                                    onBlur={() => handleSaveCustomBonus(customBonusInput)}
+                                    onKeyDown={(e) => { if (e.key === 'Enter') handleSaveCustomBonus(customBonusInput); }}
+                                    placeholder="أدخل عدد الدقائق الاستثنائية (مثال: 300)..."
+                                    className="w-full pl-10 pr-3 py-1.5 text-xs bg-white border border-teal-200 rounded-lg outline-none focus:border-teal-500 focus:ring-1 focus:ring-teal-200 font-bold text-slate-800 placeholder:text-slate-400 placeholder:font-normal shadow-inner"
+                                />
+                                <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[10px] text-slate-400 font-medium">دقيقة</span>
+                            </div>
+                            <button
+                                type="button"
+                                onClick={() => handleSaveCustomBonus(customBonusInput)}
+                                disabled={savingBonus}
+                                className="px-3.5 py-1.5 bg-teal-600 hover:bg-teal-700 text-white text-xs font-bold rounded-lg shadow-sm transition disabled:opacity-50 flex items-center gap-1 shrink-0"
+                            >
+                                {savingBonus ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : 'تطبيق'}
+                            </button>
+                        </div>
+
+                        {/* Quick Presets */}
+                        <div className="flex items-center gap-1.5 flex-wrap pt-0.5">
+                            <span className="text-[10px] text-slate-400 font-medium ml-1">خيارات سريعة:</span>
+                            <button
+                                type="button"
+                                onClick={() => handleSaveCustomBonus("0")}
+                                className={`text-[10px] px-2 py-0.5 rounded-md border transition font-medium ${extraMinutes === 0 ? 'bg-slate-200 text-slate-800 border-slate-300 font-bold' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'}`}
+                            >
+                                0 (بدون إضافي)
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => handleSaveCustomBonus("120")}
+                                className={`text-[10px] px-2 py-0.5 rounded-md border transition font-medium ${extraMinutes === 120 ? 'bg-teal-600 text-white border-teal-600 font-bold' : 'bg-white text-teal-700 border-teal-200 hover:bg-teal-50'}`}
+                            >
+                                +120 د (ساعتان)
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => handleSaveCustomBonus("300")}
+                                className={`text-[10px] px-2 py-0.5 rounded-md border transition font-medium ${extraMinutes === 300 ? 'bg-teal-600 text-white border-teal-600 font-bold' : 'bg-white text-teal-700 border-teal-200 hover:bg-teal-50'}`}
+                            >
+                                +300 د (المنحة المعتادة)
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => handleSaveCustomBonus("360")}
+                                className={`text-[10px] px-2 py-0.5 rounded-md border transition font-medium ${extraMinutes === 360 ? 'bg-teal-600 text-white border-teal-600 font-bold' : 'bg-white text-teal-700 border-teal-200 hover:bg-teal-50'}`}
+                            >
+                                +360 د (6 ساعات)
+                            </button>
                         </div>
                     </div>
 
