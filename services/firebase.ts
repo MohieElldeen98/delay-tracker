@@ -156,6 +156,14 @@ export const DB = {
     });
   },
 
+  updateUserPassword: async (userId: string, newPassword: string): Promise<void> => {
+    const db = DB.getDbInstance();
+    if (!db) throw new Error("Missing Config");
+    await updateDoc(doc(db, "users", userId), {
+      password: newPassword
+    });
+  },
+
   deleteUser: async (userId: string): Promise<void> => {
       const db = DB.getDbInstance();
       if (!db) throw new Error("Missing Config");

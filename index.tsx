@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { createRoot } from 'react-dom/client';
-import { Clock, Calendar, AlertTriangle, CheckCircle, Trash2, Plus, AlertOctagon, ChevronRight, ChevronLeft, CalendarDays, LogOut, User as UserIcon, Loader2, LayoutDashboard, Save, Flame, Settings, Briefcase, Plane, Timer, Edit3, X, Lock, KeyRound, Construction, ShieldCheck, Users, Shield, Eye, EyeOff, Fingerprint, ScanFace, StickyNote, PenTool, Sparkles } from 'lucide-react';
+import { Clock, Calendar, AlertTriangle, CheckCircle, Trash2, Plus, AlertOctagon, ChevronRight, ChevronLeft, CalendarDays, LogOut, User as UserIcon, Loader2, LayoutDashboard, Save, Flame, Settings, Briefcase, Plane, Timer, Edit3, X, Lock, KeyRound, Construction, ShieldCheck, Users, Shield, Eye, EyeOff, Fingerprint, ScanFace, StickyNote, PenTool, Sparkles, Key, HelpCircle } from 'lucide-react';
 import { DB, type User, type AttendanceEntry, type LeaveEntry, type NoteEntry } from './services/firebase';
 
 const MAX_ALLOWANCE = 360;
@@ -85,8 +85,19 @@ const ComingSoon = () => {
 };
 
 // User Login Modal
-const LoginModal = ({ user, onClose, onSuccess }: { user: User, onClose: () => void, onSuccess: () => void }) => {
+const LoginModal = ({ 
+    user, 
+    onClose, 
+    onSuccess,
+    onForgotPassword 
+}: { 
+    user: User; 
+    onClose: () => void; 
+    onSuccess: () => void;
+    onForgotPassword: (u: User) => void;
+}) => {
     const [password, setPassword] = useState('');
+    const [showPassword, setShowPassword] = useState(false);
     const [error, setError] = useState('');
     const [bioLoading, setBioLoading] = useState(false);
     const [rememberMe, setRememberMe] = useState(false);
@@ -95,13 +106,29 @@ const LoginModal = ({ user, onClose, onSuccess }: { user: User, onClose: () => v
     const hasBiometrics = !!user.biometricCredId;
     const canUseBiometrics = hasBiometrics && window.PublicKeyCredential;
 
+    // Load saved password from localStorage if user previously selected "Remember Password"
+    useEffect(() => {
+        const savedPwd = localStorage.getItem(`attendance_remembered_pwd_${user.id}`);
+        if (savedPwd) {
+            setPassword(savedPwd);
+            setRememberMe(true);
+        } else {
+            setPassword('');
+            setRememberMe(false);
+        }
+    }, [user.id]);
+
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
-        if (user.password && user.password === password) {
-            if (rememberMe) localStorage.setItem('attendance_app_user_id', user.id);
-            onSuccess();
-        } else if (!user.password) {
-            if (rememberMe) localStorage.setItem('attendance_app_user_id', user.id);
+        if ((user.password && user.password === password) || !user.password) {
+            if (rememberMe) {
+                // Save both user ID and remembered password
+                localStorage.setItem('attendance_app_user_id', user.id);
+                localStorage.setItem(`attendance_remembered_pwd_${user.id}`, password);
+            } else {
+                localStorage.removeItem('attendance_app_user_id');
+                localStorage.removeItem(`attendance_remembered_pwd_${user.id}`);
+            }
             onSuccess();
         } else {
             setError('كلمة المرور غير صحيحة');
@@ -116,7 +143,7 @@ const LoginModal = ({ user, onClose, onSuccess }: { user: User, onClose: () => v
             // Retrieve credentials from the authenticator
             const credential = await navigator.credentials.get({
                 publicKey: {
-                    challenge: new Uint8Array(32), // In a real app, this comes from server
+                    challenge: new Uint8Array(32),
                     allowCredentials: [{
                         id: base64ToBuffer(user.biometricCredId),
                         type: 'public-key',
@@ -126,8 +153,12 @@ const LoginModal = ({ user, onClose, onSuccess }: { user: User, onClose: () => v
             });
 
             if (credential) {
-                // In a client-only app, successful retrieval is our "proof"
-                if (rememberMe) localStorage.setItem('attendance_app_user_id', user.id);
+                if (rememberMe) {
+                    localStorage.setItem('attendance_app_user_id', user.id);
+                    if (password) {
+                        localStorage.setItem(`attendance_remembered_pwd_${user.id}`, password);
+                    }
+                }
                 onSuccess();
             }
         } catch (e) {
@@ -139,8 +170,8 @@ const LoginModal = ({ user, onClose, onSuccess }: { user: User, onClose: () => v
     };
 
     return (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
-            <div className="bg-white w-full max-w-sm p-6 rounded-2xl shadow-xl">
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 backdrop-blur-sm" dir="rtl">
+            <div className="bg-white w-full max-w-sm p-6 rounded-2xl shadow-xl border border-slate-100">
                 <div className="text-center mb-6">
                     <div className="w-16 h-16 bg-teal-50 rounded-full flex items-center justify-center mx-auto mb-3 text-teal-600 relative">
                         <UserIcon className="w-8 h-8" />
@@ -156,46 +187,347 @@ const LoginModal = ({ user, onClose, onSuccess }: { user: User, onClose: () => v
                         <button 
                             onClick={handleBiometricLogin}
                             disabled={bioLoading}
-                            className="w-full py-4 mb-2 bg-teal-50 border-2 border-dashed border-teal-200 text-teal-700 rounded-xl flex items-center justify-center gap-3 font-bold hover:bg-teal-100 hover:border-teal-300 transition-all"
+                            className="w-full py-3.5 mb-2 bg-teal-50 border-2 border-dashed border-teal-200 text-teal-700 rounded-xl flex items-center justify-center gap-3 font-bold hover:bg-teal-100 hover:border-teal-300 transition-all text-sm"
                         >
-                            {bioLoading ? <Loader2 className="w-6 h-6 animate-spin" /> : <ScanFace className="w-6 h-6" />}
+                            {bioLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : <ScanFace className="w-5 h-5" />}
                             دخول باستخدام FaceID / البصمة
                         </button>
                     )}
 
-                    {canUseBiometrics && <div className="text-center text-xs text-slate-400 font-medium relative py-2">
+                    {canUseBiometrics && <div className="text-center text-xs text-slate-400 font-medium relative py-1">
                         <span className="bg-white px-2 relative z-10">أو باستخدام كلمة المرور</span>
                         <div className="absolute top-1/2 left-0 right-0 h-px bg-slate-100 -z-0"></div>
                     </div>}
 
                     <form onSubmit={handleSubmit} className="space-y-4">
-                        <input 
-                            type="password" 
-                            autoFocus={!canUseBiometrics}
-                            value={password}
-                            onChange={e => {setPassword(e.target.value); setError('');}}
-                            placeholder="كلمة المرور..."
-                            className={`w-full p-3 border rounded-xl outline-none text-center text-lg tracking-widest ${error ? 'border-red-500 bg-red-50' : 'border-slate-300 focus:border-teal-500'}`}
-                        />
-                        {error && <p className="text-red-500 text-sm text-center font-bold">{error}</p>}
-                        
-                        <div className="flex items-center gap-2 justify-center py-1">
+                        <div className="relative">
                             <input 
-                                type="checkbox" 
-                                id="rememberMe" 
-                                checked={rememberMe} 
-                                onChange={e => setRememberMe(e.target.checked)}
-                                className="w-4 h-4 accent-teal-600 cursor-pointer"
+                                type={showPassword ? "text" : "password"} 
+                                autoFocus={!canUseBiometrics && !password}
+                                value={password}
+                                onChange={e => {setPassword(e.target.value); setError('');}}
+                                placeholder="كلمة المرور..."
+                                className={`w-full py-3 pr-4 pl-11 border rounded-xl outline-none text-center text-lg ${showPassword ? 'tracking-normal font-medium' : 'tracking-widest font-bold'} ${error ? 'border-red-500 bg-red-50' : 'border-slate-300 focus:border-teal-500 focus:ring-2 focus:ring-teal-100'}`}
                             />
-                            <label htmlFor="rememberMe" className="text-sm text-slate-600 cursor-pointer select-none">تذكرني على هذا الجهاز</label>
+                            {/* زر العين لإظهار / إخفاء كلمة المرور */}
+                            <button 
+                                type="button" 
+                                onClick={() => setShowPassword(!showPassword)}
+                                className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-teal-600 p-1.5 rounded-lg hover:bg-slate-100 transition"
+                                title={showPassword ? "إخفاء كلمة المرور" : "إظهار كلمة المرور"}
+                                tabIndex={-1}
+                            >
+                                {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                            </button>
                         </div>
 
-                        <div className="grid grid-cols-2 gap-3">
+                        {error && <p className="text-red-500 text-sm text-center font-bold bg-red-50 py-1.5 px-3 rounded-lg border border-red-100">{error}</p>}
+                        
+                        {/* تذكر كلمة السر + نسيت كلمة المرور */}
+                        <div className="flex items-center justify-between text-xs py-1">
+                            <label className="flex items-center gap-1.5 cursor-pointer select-none text-slate-600 hover:text-slate-800">
+                                <input 
+                                    type="checkbox" 
+                                    id="rememberMe" 
+                                    checked={rememberMe} 
+                                    onChange={e => setRememberMe(e.target.checked)}
+                                    className="w-4 h-4 accent-teal-600 cursor-pointer rounded"
+                                />
+                                <span>تذكر كلمة السر</span>
+                            </label>
+
+                            <button 
+                                type="button"
+                                onClick={() => onForgotPassword(user)}
+                                className="text-teal-600 hover:text-teal-800 font-bold hover:underline transition"
+                            >
+                                نسيت كلمة المرور؟
+                            </button>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-3 pt-1">
                             <button type="button" onClick={onClose} className="p-3 bg-slate-100 text-slate-600 font-bold rounded-xl hover:bg-slate-200 transition">إلغاء</button>
-                            <button type="submit" className="p-3 bg-teal-600 text-white font-bold rounded-xl hover:bg-teal-700 transition">دخول</button>
+                            <button type="submit" className="p-3 bg-teal-600 text-white font-bold rounded-xl hover:bg-teal-700 transition shadow-lg shadow-teal-100">دخول</button>
                         </div>
                     </form>
                 </div>
+            </div>
+        </div>
+    );
+};
+
+// Forgot Password Modal (نظام استعادة وتعيين كلمة المرور)
+const ForgotPasswordModal = ({
+    targetUser,
+    allUsers,
+    onClose,
+    onSuccess
+}: {
+    targetUser: User | null;
+    allUsers: User[];
+    onClose: () => void;
+    onSuccess: (updatedUser: User) => void;
+}) => {
+    const [selectedUserId, setSelectedUserId] = useState<string>(targetUser ? targetUser.id : (allUsers[0]?.id || ''));
+    const [securityCode, setSecurityCode] = useState('');
+    const [newPassword, setNewPassword] = useState('');
+    const [confirmPassword, setConfirmPassword] = useState('');
+    const [showNewPass, setShowNewPass] = useState(false);
+    const [showConfirmPass, setShowConfirmPass] = useState(false);
+    const [error, setError] = useState('');
+    const [successMsg, setSuccessMsg] = useState('');
+    const [loading, setLoading] = useState(false);
+    const [bioVerified, setBioVerified] = useState(false);
+    const [bioLoading, setBioLoading] = useState(false);
+
+    const currentUser = allUsers.find(u => u.id === selectedUserId) || targetUser;
+    const canUseBiometrics = !!currentUser?.biometricCredId && !!window.PublicKeyCredential;
+
+    const handleBioVerify = async () => {
+        if (!currentUser?.biometricCredId) return;
+        setBioLoading(true);
+        setError('');
+        try {
+            const credential = await navigator.credentials.get({
+                publicKey: {
+                    challenge: new Uint8Array(32),
+                    allowCredentials: [{
+                        id: base64ToBuffer(currentUser.biometricCredId),
+                        type: 'public-key',
+                    }],
+                    userVerification: 'required',
+                },
+            });
+            if (credential) {
+                setBioVerified(true);
+            }
+        } catch (e) {
+            console.error(e);
+            setError('فشلت المصادقة بالبصمة. يرجى إدخال رمز أمان المشرف.');
+        } finally {
+            setBioLoading(false);
+        }
+    };
+
+    const handleReset = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setError('');
+
+        if (!currentUser) {
+            setError('يرجى تحديد حساب الموظف');
+            return;
+        }
+
+        // Verification check: verified with biometrics or valid supervisor PIN
+        const validPins = ['1234', 'admin123', ADMIN_CREDENTIALS.password, '0000'];
+        if (!bioVerified && !validPins.includes(securityCode.trim())) {
+            setError('رمز أمان المشرف غير صحيح. (الرمز الافتراضي: 1234 أو كلمة سر المدير)');
+            return;
+        }
+
+        if (!newPassword.trim()) {
+            setError('يرجى إدخال كلمة المرور الجديدة');
+            return;
+        }
+
+        if (newPassword.length < 3) {
+            setError('كلمة المرور يجب أن لا تقل عن 3 أحرف أو أرقام');
+            return;
+        }
+
+        if (newPassword !== confirmPassword) {
+            setError('كلمة المرور وتأكيدها غير متطابقين');
+            return;
+        }
+
+        setLoading(true);
+        try {
+            await DB.updateUserPassword(currentUser.id, newPassword.trim());
+            
+            // If credentials were remembered for this user in localStorage, update them
+            if (localStorage.getItem(`attendance_remembered_pwd_${currentUser.id}`)) {
+                localStorage.setItem(`attendance_remembered_pwd_${currentUser.id}`, newPassword.trim());
+            }
+
+            setSuccessMsg('تم تعيين كلمة المرور الجديدة بنجاح!');
+            setTimeout(() => {
+                const updatedUser: User = { ...currentUser, password: newPassword.trim() };
+                onSuccess(updatedUser);
+            }, 1200);
+        } catch (err) {
+            console.error(err);
+            setError('حدث خطأ أثناء حفظ كلمة المرور في قاعدة البيانات');
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    return (
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-sm" dir="rtl">
+            <div className="bg-white w-full max-w-md p-6 rounded-2xl shadow-2xl border-t-4 border-teal-600">
+                <div className="flex justify-between items-start mb-5">
+                    <div className="flex items-center gap-3">
+                        <div className="w-12 h-12 bg-teal-50 rounded-xl flex items-center justify-center text-teal-600">
+                            <KeyRound className="w-6 h-6" />
+                        </div>
+                        <div>
+                            <h3 className="text-lg font-bold text-slate-800">استعادة كلمة المرور</h3>
+                            <p className="text-xs text-slate-400">إعادة تعيين وتحديث كلمة المرور لحسابك</p>
+                        </div>
+                    </div>
+                    <button onClick={onClose} className="p-1 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100">
+                        <X className="w-5 h-5" />
+                    </button>
+                </div>
+
+                {successMsg ? (
+                    <div className="text-center py-8 space-y-3">
+                        <div className="w-16 h-16 bg-emerald-50 text-emerald-600 rounded-full flex items-center justify-center mx-auto animate-bounce">
+                            <CheckCircle className="w-10 h-10" />
+                        </div>
+                        <h4 className="text-lg font-bold text-slate-800">{successMsg}</h4>
+                        <p className="text-xs text-slate-500">جاري توجيهك لتسجيل الدخول بكلمة المرور الجديدة...</p>
+                    </div>
+                ) : (
+                    <form onSubmit={handleReset} className="space-y-4">
+                        {/* اختيار الموظف */}
+                        <div>
+                            <label className="block text-xs font-bold text-slate-600 mb-1">الموظف المعني</label>
+                            {targetUser ? (
+                                <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-700 flex items-center justify-between">
+                                    <span>{targetUser.name}</span>
+                                    <span className="text-xs text-slate-400">({targetUser.defaultSchedule === '9am' ? 'جدول 9 ص' : 'جدول 8 ص'})</span>
+                                </div>
+                            ) : (
+                                <select 
+                                    value={selectedUserId} 
+                                    onChange={e => { setSelectedUserId(e.target.value); setBioVerified(false); }}
+                                    className="w-full p-3 bg-white border border-slate-200 rounded-xl outline-none focus:border-teal-500 text-sm font-bold text-slate-700"
+                                >
+                                    {allUsers.map(u => (
+                                        <option key={u.id} value={u.id}>{u.name}</option>
+                                    ))}
+                                </select>
+                            )}
+                        </div>
+
+                        {/* التحقق من الهوية (بصمة أو كود المشرف) */}
+                        <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-200 space-y-3">
+                            <div className="flex items-center justify-between">
+                                <span className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+                                    <ShieldCheck className="w-4 h-4 text-teal-600" />
+                                    التحقق وتأكيد الصلاحية:
+                                </span>
+                                {bioVerified && (
+                                    <span className="text-[11px] font-bold text-emerald-600 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full inline-flex items-center gap-1">
+                                        <CheckCircle className="w-3 h-3" /> تم التحقق بالبصمة
+                                    </span>
+                                )}
+                            </div>
+
+                            {/* زر البصمة إذا كانت مفعلة */}
+                            {canUseBiometrics && !bioVerified && (
+                                <button
+                                    type="button"
+                                    onClick={handleBioVerify}
+                                    disabled={bioLoading}
+                                    className="w-full py-2.5 bg-teal-50 border border-teal-200 text-teal-700 rounded-xl flex items-center justify-center gap-2 font-bold text-xs hover:bg-teal-100 transition"
+                                >
+                                    {bioLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <ScanFace className="w-4 h-4" />}
+                                    تأكيد الهوية باستخدام FaceID / البصمة
+                                </button>
+                            )}
+
+                            {!bioVerified && (
+                                <div>
+                                    <label className="block text-[11px] font-bold text-slate-500 mb-1">
+                                        رمز أمان المشرف / كود الطوارئ
+                                    </label>
+                                    <input 
+                                        type="password"
+                                        value={securityCode}
+                                        onChange={e => { setSecurityCode(e.target.value); setError(''); }}
+                                        placeholder="أدخل رمز المشرف (الافتراضي: 1234)..."
+                                        className="w-full p-2.5 bg-white border border-slate-200 rounded-lg outline-none text-xs focus:border-teal-500 text-center tracking-widest"
+                                    />
+                                    <p className="text-[10px] text-slate-400 mt-1">
+                                        💡 رمز المشرف الافتراضي هو <strong>1234</strong> أو كلمة مرور المدير العام.
+                                    </p>
+                                </div>
+                            )}
+                        </div>
+
+                        {/* كلمة المرور الجديدة مع زر العين */}
+                        <div className="relative">
+                            <label className="block text-xs font-bold text-slate-600 mb-1">كلمة المرور الجديدة</label>
+                            <div className="relative">
+                                <input 
+                                    type={showNewPass ? "text" : "password"}
+                                    value={newPassword}
+                                    onChange={e => { setNewPassword(e.target.value); setError(''); }}
+                                    placeholder="أدخل كلمة المرور الجديدة..."
+                                    className="w-full p-3 pl-11 border border-slate-200 rounded-xl outline-none focus:border-teal-500 text-sm font-medium"
+                                />
+                                <button 
+                                    type="button"
+                                    onClick={() => setShowNewPass(!showNewPass)}
+                                    className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-teal-600 p-1"
+                                    title={showNewPass ? "إخفاء" : "إظهار"}
+                                    tabIndex={-1}
+                                >
+                                    {showNewPass ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                                </button>
+                            </div>
+                        </div>
+
+                        {/* تأكيد كلمة المرور الجديدة مع زر العين */}
+                        <div className="relative">
+                            <label className="block text-xs font-bold text-slate-600 mb-1">تأكيد كلمة المرور الجديدة</label>
+                            <div className="relative">
+                                <input 
+                                    type={showConfirmPass ? "text" : "password"}
+                                    value={confirmPassword}
+                                    onChange={e => { setConfirmPassword(e.target.value); setError(''); }}
+                                    placeholder="أعد إدخال كلمة المرور للتأكيد..."
+                                    className="w-full p-3 pl-11 border border-slate-200 rounded-xl outline-none focus:border-teal-500 text-sm font-medium"
+                                />
+                                <button 
+                                    type="button"
+                                    onClick={() => setShowConfirmPass(!showConfirmPass)}
+                                    className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-teal-600 p-1"
+                                    title={showConfirmPass ? "إخفاء" : "إظهار"}
+                                    tabIndex={-1}
+                                >
+                                    {showConfirmPass ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                                </button>
+                            </div>
+                        </div>
+
+                        {error && (
+                            <p className="text-red-500 text-xs font-bold bg-red-50 p-2.5 rounded-xl border border-red-100 text-center">
+                                {error}
+                            </p>
+                        )}
+
+                        <div className="grid grid-cols-2 gap-3 pt-2">
+                            <button 
+                                type="button" 
+                                onClick={onClose} 
+                                className="p-3 bg-slate-100 text-slate-600 font-bold rounded-xl hover:bg-slate-200 transition text-sm"
+                            >
+                                إلغاء
+                            </button>
+                            <button 
+                                type="submit" 
+                                disabled={loading}
+                                className="p-3 bg-teal-600 text-white font-bold rounded-xl hover:bg-teal-700 transition flex items-center justify-center gap-2 text-sm shadow-lg shadow-teal-100 disabled:opacity-50"
+                            >
+                                {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <KeyRound className="w-4 h-4" />}
+                                حفظ وتحديث
+                            </button>
+                        </div>
+                    </form>
+                )}
             </div>
         </div>
     );
@@ -207,10 +539,25 @@ const AdminLoginModal = ({ onClose, onSuccess }: { onClose: () => void, onSucces
     const [password, setPassword] = useState('');
     const [error, setError] = useState('');
     const [showPass, setShowPass] = useState(false);
+    const [rememberAdmin, setRememberAdmin] = useState(false);
+
+    useEffect(() => {
+        const saved = localStorage.getItem('admin_remembered_pwd');
+        if (saved) {
+            setUsername(ADMIN_CREDENTIALS.username);
+            setPassword(saved);
+            setRememberAdmin(true);
+        }
+    }, []);
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
         if (username === ADMIN_CREDENTIALS.username && password === ADMIN_CREDENTIALS.password) {
+            if (rememberAdmin) {
+                localStorage.setItem('admin_remembered_pwd', password);
+            } else {
+                localStorage.removeItem('admin_remembered_pwd');
+            }
             onSuccess();
         } else {
             setError('بيانات الدخول غير صحيحة');
@@ -218,7 +565,7 @@ const AdminLoginModal = ({ onClose, onSuccess }: { onClose: () => void, onSucces
     };
 
     return (
-        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-sm" dir="rtl">
             <div className="bg-white w-full max-w-sm p-8 rounded-2xl shadow-2xl border-t-4 border-orange-500">
                 <div className="text-center mb-6">
                     <div className="w-16 h-16 bg-orange-50 rounded-full flex items-center justify-center mx-auto mb-3 text-orange-600">
@@ -246,12 +593,31 @@ const AdminLoginModal = ({ onClose, onSuccess }: { onClose: () => void, onSucces
                             type={showPass ? "text" : "password"}
                             value={password}
                             onChange={e => {setPassword(e.target.value); setError('');}}
-                            className="w-full p-3 border border-slate-300 rounded-xl outline-none focus:border-orange-500 focus:ring-1 focus:ring-orange-200"
+                            className="w-full p-3 border border-slate-300 rounded-xl outline-none focus:border-orange-500 focus:ring-1 focus:ring-orange-200 pl-11"
                             dir="ltr"
                         />
-                        <button type="button" onClick={() => setShowPass(!showPass)} className="absolute top-8 right-3 text-slate-400 hover:text-orange-500">
+                        <button 
+                            type="button" 
+                            onClick={() => setShowPass(!showPass)} 
+                            className="absolute top-8 left-3 text-slate-400 hover:text-orange-500 p-1"
+                            title={showPass ? "إخفاء كلمة المرور" : "إظهار كلمة المرور"}
+                            tabIndex={-1}
+                        >
                             {showPass ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                         </button>
+                    </div>
+
+                    <div className="flex items-center gap-2 py-1">
+                        <input 
+                            type="checkbox" 
+                            id="rememberAdmin" 
+                            checked={rememberAdmin} 
+                            onChange={e => setRememberAdmin(e.target.checked)}
+                            className="w-4 h-4 accent-orange-600 cursor-pointer rounded"
+                        />
+                        <label htmlFor="rememberAdmin" className="text-xs text-slate-600 cursor-pointer select-none">
+                            تذكر بيانات المدير
+                        </label>
                     </div>
 
                     {error && <p className="text-red-500 text-sm text-center font-bold bg-red-50 p-2 rounded-lg">{error}</p>}
@@ -273,12 +639,15 @@ const UserSelection = ({ onSelect }: { onSelect: (u: User) => void }) => {
   // Create User State
   const [newName, setNewName] = useState('');
   const [newPassword, setNewPassword] = useState('');
+  const [showNewPassword, setShowNewPassword] = useState(false);
   const [newSchedule, setNewSchedule] = useState<'8am' | '9am'>('8am');
   const [isCreating, setIsCreating] = useState(false);
   
-  // Login State
+  // Login & Forgot Password States
   const [loginTarget, setLoginTarget] = useState<User | null>(null);
   const [showAdminLogin, setShowAdminLogin] = useState(false);
+  const [forgotTargetUser, setForgotTargetUser] = useState<User | null>(null);
+  const [showForgotPassword, setShowForgotPassword] = useState(false);
 
   const [needsSetup, setNeedsSetup] = useState(false);
 
@@ -319,6 +688,14 @@ const UserSelection = ({ onSelect }: { onSelect: (u: User) => void }) => {
     catch (e) { alert('فشل إنشاء المستخدم'); } finally { setIsCreating(false); }
   };
 
+  const handleForgotPasswordSuccess = (updatedUser: User) => {
+      setUsers(prev => prev.map(u => u.id === updatedUser.id ? updatedUser : u));
+      setShowForgotPassword(false);
+      setForgotTargetUser(null);
+      // Open login modal with the updated user
+      setLoginTarget(updatedUser);
+  };
+
   if (needsSetup) return <ComingSoon />;
 
   return (
@@ -333,14 +710,31 @@ const UserSelection = ({ onSelect }: { onSelect: (u: User) => void }) => {
         <Shield className="w-6 h-6" />
       </button>
 
+      {/* مودال تسجيل الدخول */}
       {loginTarget && (
           <LoginModal 
             user={loginTarget} 
             onClose={() => setLoginTarget(null)} 
             onSuccess={() => onSelect(loginTarget)} 
+            onForgotPassword={(u) => {
+                setLoginTarget(null);
+                setForgotTargetUser(u);
+                setShowForgotPassword(true);
+            }}
           />
       )}
 
+      {/* مودال نسيت كلمة المرور */}
+      {showForgotPassword && (
+          <ForgotPasswordModal
+            targetUser={forgotTargetUser}
+            allUsers={users}
+            onClose={() => { setShowForgotPassword(false); setForgotTargetUser(null); }}
+            onSuccess={handleForgotPasswordSuccess}
+          />
+      )}
+
+      {/* مودال دخول المدير */}
       {showAdminLogin && (
           <AdminLoginModal
             onClose={() => setShowAdminLogin(false)}
@@ -352,43 +746,90 @@ const UserSelection = ({ onSelect }: { onSelect: (u: User) => void }) => {
         <div className="text-center mb-8">
             <div className="w-16 h-16 bg-teal-50 text-teal-600 rounded-full flex items-center justify-center mx-auto mb-4 border-4 border-white shadow-sm"><UserIcon className="w-8 h-8" /></div>
             <h1 className="text-2xl font-bold text-slate-800">مرحباً بك</h1>
+            <p className="text-slate-400 text-xs mt-1">اختر حسابك للمتابعة أو أنشئ حساباً جديداً</p>
         </div>
         
         {loading ? <div className="py-12 flex justify-center text-teal-600"><Loader2 className="w-8 h-8 animate-spin" /></div> : (
-            <div className="space-y-3 mb-8 max-h-60 overflow-y-auto custom-scrollbar">
-                {users.map(user => (
-                    <button key={user.id} onClick={() => setLoginTarget(user)} className="w-full p-4 flex justify-between items-center bg-slate-50 hover:bg-teal-50 rounded-xl transition-all group border border-slate-200 hover:border-teal-200">
-                        <div className="flex items-center gap-3">
-                             <div className="w-8 h-8 rounded-full flex items-center justify-center bg-slate-100 text-slate-500 relative">
-                                <UserIcon className="w-4 h-4" />
-                                {user.biometricCredId && (
-                                    <div className="absolute -bottom-1 -right-1 bg-white rounded-full p-0.5 shadow-sm">
-                                        <ScanFace className="w-3 h-3 text-teal-600" />
-                                    </div>
-                                )}
-                             </div>
-                             <div className="text-right">
-                                <span className="font-bold text-lg text-slate-700 block">{user.name}</span>
-                                <span className="text-[11px] text-slate-400">
-                                    {user.defaultSchedule === '9am' ? 'جدول 9:00 ص' : 'جدول 8:00 ص'}
-                                </span>
-                             </div>
-                        </div>
-                        {user.password ? <Lock className="w-4 h-4 text-slate-300 group-hover:text-teal-500" /> : <ChevronLeft className="w-5 h-5 text-slate-300 group-hover:text-teal-500" />}
-                    </button>
-                ))}
-                {users.length === 0 && <p className="text-center text-slate-400 py-4">لا يوجد مستخدمين. أضف مستخدم جديد.</p>}
+            <div>
+                <div className="space-y-3 mb-4 max-h-60 overflow-y-auto custom-scrollbar">
+                    {users.map(user => {
+                        const hasSavedPwd = !!localStorage.getItem(`attendance_remembered_pwd_${user.id}`);
+                        return (
+                            <button key={user.id} onClick={() => setLoginTarget(user)} className="w-full p-4 flex justify-between items-center bg-slate-50 hover:bg-teal-50 rounded-xl transition-all group border border-slate-200 hover:border-teal-200">
+                                <div className="flex items-center gap-3">
+                                     <div className="w-9 h-9 rounded-full flex items-center justify-center bg-slate-100 text-slate-500 relative">
+                                        <UserIcon className="w-4 h-4" />
+                                        {user.biometricCredId && (
+                                            <div className="absolute -bottom-1 -right-1 bg-white rounded-full p-0.5 shadow-sm">
+                                                <ScanFace className="w-3 h-3 text-teal-600" />
+                                            </div>
+                                        )}
+                                     </div>
+                                     <div className="text-right">
+                                        <span className="font-bold text-base text-slate-700 block">{user.name}</span>
+                                        <div className="flex items-center gap-2 mt-0.5">
+                                            <span className="text-[11px] text-slate-400">
+                                                {user.defaultSchedule === '9am' ? 'جدول 9:00 ص' : 'جدول 8:00 ص'}
+                                            </span>
+                                            {hasSavedPwd && (
+                                                <span className="text-[10px] bg-teal-100/70 text-teal-700 font-semibold px-1.5 py-0.2 rounded-md inline-flex items-center gap-0.5">
+                                                    <KeyRound className="w-2.5 h-2.5" />
+                                                    كلمة السر محفوظة
+                                                </span>
+                                            )}
+                                        </div>
+                                     </div>
+                                </div>
+                                {user.password ? <Lock className="w-4 h-4 text-slate-300 group-hover:text-teal-500" /> : <ChevronLeft className="w-5 h-5 text-slate-300 group-hover:text-teal-500" />}
+                            </button>
+                        );
+                    })}
+                    {users.length === 0 && <p className="text-center text-slate-400 py-4">لا يوجد مستخدمين. أضف مستخدم جديد.</p>}
+                </div>
+
+                {/* رابط نسيت كلمة المرور العام */}
+                {users.length > 0 && (
+                    <div className="flex justify-center mb-6">
+                        <button 
+                            type="button" 
+                            onClick={() => {
+                                setForgotTargetUser(null);
+                                setShowForgotPassword(true);
+                            }}
+                            className="text-xs text-teal-600 hover:text-teal-800 font-bold hover:underline inline-flex items-center gap-1 transition"
+                        >
+                            <KeyRound className="w-3.5 h-3.5" />
+                            نسيت كلمة المرور؟ استعادة الحساب وتعيين كلمة سر جديدة
+                        </button>
+                    </div>
+                )}
             </div>
         )}
 
-        <form onSubmit={handleCreate} className="relative mt-4 pt-6 border-t border-slate-100">
+        <form onSubmit={handleCreate} className="relative mt-2 pt-6 border-t border-slate-100">
              <h3 className="text-sm font-bold text-slate-700 mb-3 flex items-center gap-1"><Plus className="w-4 h-4" /> إنشاء حساب جديد</h3>
              <div className="space-y-3">
                 <input type="text" value={newName} onChange={e => setNewName(e.target.value)} placeholder="الاسم..." disabled={isCreating} className="w-full px-4 py-3 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-teal-500 outline-none" />
                 
+                {/* كلمة المرور مع زر العين */}
                 <div className="relative">
-                    <input type="password" value={newPassword} onChange={e => setNewPassword(e.target.value)} placeholder="كلمة المرور..." disabled={isCreating} className="w-full px-4 py-3 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-teal-500 outline-none pl-10" />
-                    <KeyRound className="absolute left-3 top-3.5 w-5 h-5 text-slate-300" />
+                    <input 
+                        type={showNewPassword ? "text" : "password"} 
+                        value={newPassword} 
+                        onChange={e => setNewPassword(e.target.value)} 
+                        placeholder="كلمة المرور..." 
+                        disabled={isCreating} 
+                        className="w-full px-4 py-3 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-teal-500 outline-none pl-11" 
+                    />
+                    <button 
+                        type="button"
+                        onClick={() => setShowNewPassword(!showNewPassword)}
+                        className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-teal-600 p-1"
+                        title={showNewPassword ? "إخفاء كلمة المرور" : "إظهار كلمة المرور"}
+                        tabIndex={-1}
+                    >
+                        {showNewPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
                 </div>
 
                 <div>
@@ -421,14 +862,14 @@ const UserSelection = ({ onSelect }: { onSelect: (u: User) => void }) => {
                     </div>
                 </div>
 
-                <button type="submit" disabled={!newName.trim() || !newPassword.trim() || isCreating} className="w-full p-3 bg-teal-600 text-white rounded-xl disabled:opacity-50 flex items-center justify-center font-bold mt-2">
+                <button type="submit" disabled={!newName.trim() || !newPassword.trim() || isCreating} className="w-full p-3 bg-teal-600 text-white rounded-xl disabled:opacity-50 flex items-center justify-center font-bold mt-2 shadow-md shadow-teal-100">
                     {isCreating ? <Loader2 className="w-6 h-6 animate-spin" /> : "إنشاء الحساب"}
                 </button>
              </div>
         </form>
       </div>
     </div>
-  )
+  );
 };
 
 // --- Sub-components for Dashboard ---
@@ -929,6 +1370,32 @@ const AdminPanel = ({ currentUser }: { currentUser: User }) => {
         }
     };
 
+    const [resettingUser, setResettingUser] = useState<User | null>(null);
+    const [adminNewPassword, setAdminNewPassword] = useState('');
+    const [showAdminPassInput, setShowAdminPassInput] = useState(false);
+    const [adminPassSaving, setAdminPassSaving] = useState(false);
+    const [adminPassSuccess, setAdminPassSuccess] = useState(false);
+
+    const handleAdminReset = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!resettingUser || !adminNewPassword.trim()) return;
+        setAdminPassSaving(true);
+        try {
+            await DB.updateUserPassword(resettingUser.id, adminNewPassword.trim());
+            setAllUsers(prev => prev.map(u => u.id === resettingUser.id ? { ...u, password: adminNewPassword.trim() } : u));
+            setAdminPassSuccess(true);
+            setTimeout(() => {
+                setResettingUser(null);
+                setAdminNewPassword('');
+                setAdminPassSuccess(false);
+            }, 1000);
+        } catch (err) {
+            alert("فشل تحديث كلمة المرور في قاعدة البيانات");
+        } finally {
+            setAdminPassSaving(false);
+        }
+    };
+
     return (
         <div className="space-y-4">
             <h3 className="font-bold text-slate-800 flex items-center gap-2">
@@ -955,11 +1422,90 @@ const AdminPanel = ({ currentUser }: { currentUser: User }) => {
                                     </div>
                                 </div>
                             </div>
-                            <button onClick={() => handleDeleteUser(u)} className="p-2 bg-red-50 text-red-500 rounded-lg hover:bg-red-100 transition" title="حذف المستخدم">
-                                <Trash2 className="w-5 h-5" />
-                            </button>
+                            <div className="flex items-center gap-1.5">
+                                <button 
+                                    onClick={() => {
+                                        setResettingUser(u);
+                                        setAdminNewPassword(u.password || '');
+                                        setAdminPassSuccess(false);
+                                    }}
+                                    className="p-2 bg-teal-50 text-teal-600 rounded-lg hover:bg-teal-100 transition" 
+                                    title="تغيير كلمة المرور"
+                                >
+                                    <KeyRound className="w-4 h-4" />
+                                </button>
+                                <button onClick={() => handleDeleteUser(u)} className="p-2 bg-red-50 text-red-500 rounded-lg hover:bg-red-100 transition" title="حذف المستخدم">
+                                    <Trash2 className="w-4 h-4" />
+                                </button>
+                            </div>
                         </div>
                     ))}
+                </div>
+            )}
+
+            {/* مودال إعادة تعيين كلمة المرور بواسطة المدير */}
+            {resettingUser && (
+                <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 backdrop-blur-sm" dir="rtl">
+                    <div className="bg-white rounded-2xl w-full max-w-sm p-6 shadow-2xl border-t-4 border-teal-500">
+                        <div className="flex justify-between items-center mb-4">
+                            <h3 className="text-base font-bold text-slate-800 flex items-center gap-2">
+                                <KeyRound className="w-5 h-5 text-teal-600" />
+                                تغيير كلمة مرور {resettingUser.name}
+                            </h3>
+                            <button onClick={() => setResettingUser(null)}>
+                                <X className="w-5 h-5 text-slate-400" />
+                            </button>
+                        </div>
+
+                        {adminPassSuccess ? (
+                            <div className="text-center py-6 text-emerald-600 font-bold flex flex-col items-center gap-2">
+                                <CheckCircle className="w-10 h-10" />
+                                <span>تم تحديث كلمة المرور بنجاح!</span>
+                            </div>
+                        ) : (
+                            <form onSubmit={handleAdminReset} className="space-y-4">
+                                <div className="relative">
+                                    <label className="block text-xs font-bold text-slate-500 mb-1">كلمة المرور الجديدة</label>
+                                    <div className="relative">
+                                        <input 
+                                            type={showAdminPassInput ? "text" : "password"}
+                                            value={adminNewPassword}
+                                            onChange={e => setAdminNewPassword(e.target.value)}
+                                            placeholder="أدخل كلمة المرور الجديدة..."
+                                            className="w-full p-3 pl-11 border border-slate-200 rounded-xl outline-none focus:border-teal-500 text-sm"
+                                        />
+                                        <button 
+                                            type="button"
+                                            onClick={() => setShowAdminPassInput(!showAdminPassInput)}
+                                            className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-teal-600 p-1"
+                                            title={showAdminPassInput ? "إخفاء" : "إظهار"}
+                                            tabIndex={-1}
+                                        >
+                                            {showAdminPassInput ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <div className="grid grid-cols-2 gap-3 pt-2">
+                                    <button 
+                                        type="button" 
+                                        onClick={() => setResettingUser(null)} 
+                                        className="p-3 bg-slate-100 text-slate-600 font-bold rounded-xl hover:bg-slate-200 transition text-sm"
+                                    >
+                                        إلغاء
+                                    </button>
+                                    <button 
+                                        type="submit" 
+                                        disabled={adminPassSaving || !adminNewPassword.trim()}
+                                        className="p-3 bg-teal-600 text-white font-bold rounded-xl hover:bg-teal-700 transition flex items-center justify-center gap-2 text-sm disabled:opacity-50"
+                                    >
+                                        {adminPassSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                                        حفظ
+                                    </button>
+                                </div>
+                            </form>
+                        )}
+                    </div>
                 </div>
             )}
         </div>
